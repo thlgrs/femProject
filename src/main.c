@@ -15,7 +15,7 @@
 
 int main(void)
 {   
-    femSolverType solverType = FEM_FRONT;
+    femSolverType solverType = FEM_FULL;
     femRenumType renumType = FEM_XNUM;
 
     femGeo* theGeometry = geoGetGeometry();  

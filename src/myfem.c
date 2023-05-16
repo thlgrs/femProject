@@ -20,6 +20,7 @@ femFrontalSolver* femFrontalSolverCreate(int size, int nLoc){
     }
     for(i=0; i<2*nLoc; i++)
         mySolver->ALoc[i] = calloc(2*nLoc, sizeof(double));
+        mySolver->BLoc[i] = 0;
         
     return(mySolver);
 };
@@ -78,9 +79,9 @@ void femAssembleLocal(double **ALoc, double *BLoc, double **AGlob, double *BGlob
     for(int i=0; i<2*nLocal; i++){
         for(int j=0; j<2*nLocal; j++){
             ALoc[i][j] = AGlob[2*map[i/2]][2*map[j/2]];
-            printf("ALoc[%d][%d]=%f\n", i, j, ALoc[i][j]);
         }
         BLoc[i] = BGlob[2*map[i/2]];
+        printf("%d\n", BLoc[i]);
     }
 };
 
@@ -96,6 +97,34 @@ void femGausFrontal(double **Aloc, double *Bloc, int elem){
         }
     }
 };
+
+void gauss(double **A, double* B){
+    int i, j, k;
+    int size = sizeof(B)/sizeof(double);
+    double factor;
+
+    
+    /* Gauss elimination */
+    
+    for (k=0; k < size; k++) {
+        if ( fabs(A[k][k]) <= 1e-16 ) {
+            printf("Pivot index %d  ",k);
+            printf("Pivot value %e  ",A[k][k]);
+            Error("Cannot eliminate with such a pivot"); }
+        for (i = k+1 ; i <  size; i++) {
+            factor = A[i][k] / A[k][k];
+            for (j = k+1 ; j < size; j++) 
+                A[i][j] = A[i][j] - A[k][j] * factor;
+            B[i] = B[i] - B[k] * factor; }}
+    
+    /* Back-substitution */
+    
+    for (i = size-1; i >= 0 ; i--) {
+        factor = 0;
+        for (j = i+1 ; j < size; j++)
+            factor += A[i][j] * B[j];
+        B[i] = ( B[i] - factor)/A[i][i]; }
+}
 
 void femInjectGlobal(double **ALoc, double *BLoc, double **AGlob, double *BGlob, int *map, int nLocal){
     for(int i=0; i<2*nLocal; i++){
@@ -126,10 +155,9 @@ double* femFrontalSolve(femProblem *theProblem){
         femAssembleLocal(ALoc, BLoc, AGlob, BGlob, map, nLocal);
         for(i=0; i<sizeof(theSolver->old[iElem])/sizeof(int); i++){
             femGausFrontal(ALoc, BLoc, old[iElem][i]);
-            femInjectGlobal(ALoc, BLoc, AGlob, BGlob, map, nLocal);
         }
+        femInjectGlobal(ALoc, BLoc, AGlob, BGlob, map, nLocal);
     }
-    
     free(map);
     return BGlob;
 };
