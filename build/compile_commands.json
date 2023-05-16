@@ -1,0 +1,20 @@
+[
+{
+  "directory": "C:/Users/thleg/OneDrive - UCL/Bac 3/Q6/Eléments finis/finalProject/build",
+  "command": "C:/Users/thleg/scoop/apps/gcc/current/bin/gcc.exe   -g -o CMakeFiles/myFem.dir/src/fem.c.obj -c \"C:/Users/thleg/OneDrive - UCL/Bac 3/Q6/Eléments finis/finalProject/src/fem.c\"",
+  "file": "C:/Users/thleg/OneDrive - UCL/Bac 3/Q6/Eléments finis/finalProject/src/fem.c",
+  "output": "CMakeFiles/myFem.dir/src/fem.c.obj"
+},
+{
+  "directory": "C:/Users/thleg/OneDrive - UCL/Bac 3/Q6/Eléments finis/finalProject/build",
+  "command": "C:/Users/thleg/scoop/apps/gcc/current/bin/gcc.exe   -g -o CMakeFiles/myFem.dir/src/myfem.c.obj -c \"C:/Users/thleg/OneDrive - UCL/Bac 3/Q6/Eléments finis/finalProject/src/myfem.c\"",
+  "file": "C:/Users/thleg/OneDrive - UCL/Bac 3/Q6/Eléments finis/finalProject/src/myfem.c",
+  "output": "CMakeFiles/myFem.dir/src/myfem.c.obj"
+},
+{
+  "directory": "C:/Users/thleg/OneDrive - UCL/Bac 3/Q6/Eléments finis/finalProject/build",
+  "command": "C:/Users/thleg/scoop/apps/gcc/current/bin/gcc.exe   -g -o CMakeFiles/myFem.dir/src/main.c.obj -c \"C:/Users/thleg/OneDrive - UCL/Bac 3/Q6/Eléments finis/finalProject/src/main.c\"",
+  "file": "C:/Users/thleg/OneDrive - UCL/Bac 3/Q6/Eléments finis/finalProject/src/main.c",
+  "output": "CMakeFiles/myFem.dir/src/main.c.obj"
+}
+]
