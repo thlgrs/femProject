@@ -49,24 +49,27 @@ void femFrontActivity(femGeo *theGeometry, int **old){
     int *elem = theElements->elem;
     int nLocal = theElements->nLocalNode;
     
-    int notIn, ind;
-    for(int iElem=0; iElem < nElem; ++iElem){
-        for(int i=0; i<nLocal; i++){
-            notIn = 0;
-            ind = 0;
+    int found;
+    for(int iElem=0; iElem<nElem; ++iElem){
+        int first = elem[iElem-1];
+        int second = elem[iElem];
+        for (int i=0; i<nLocal; i++){
+            found = 0;
+            double xfirst = theNodes->X[first*nLocal+i];
+            double yfirst = theNodes->Y[first*nLocal+i];
             for(int j=0; j<nLocal; j++){
-                femNodes first = theNodes[(iElem-1)*nLocal+i];
-                femNodes second = theNodes[(iElem)*nLocal+j];
-                if(first.X==second.X && first.Y==second.Y){
-                    break;}
-                else{
-                    notIn++;}
+                double xsecond = theNodes->X[second*nLocal+j];
+                double ysecond = theNodes->Y[second*nLocal+j];
+                if(xfirst == xsecond && yfirst == ysecond){
+                    found++;
+                    break;
+                }
             }
-            if(notIn==nLocal){
-                old[iElem][ind] = i;
-                ind++;
-            }
-        } 
+            old[iElem][i] = found;
+        }
+        for(int i=0; i<nLocal; i++)
+            printf("%d ", old[iElem][i]);
+            printf("\n");
     }
 };
 
@@ -81,50 +84,9 @@ void femAssembleLocal(double **ALoc, double *BLoc, double **AGlob, double *BGlob
             ALoc[i][j] = AGlob[2*map[i/2]][2*map[j/2]];
         }
         BLoc[i] = BGlob[2*map[i/2]];
-        printf("%d\n", BLoc[i]);
     }
 };
 
-void femGausFrontal(double **Aloc, double *Bloc, int elem){
-    double factor;
-    int i, j, k;
-    for(k=elem; k<elem+2; k++){
-        for(i=k+1; i<elem+2; i++){
-            factor = Aloc[i][k]/Aloc[k][k];
-            for(j=k+1; j<elem+2; j++)
-                Aloc[i][j] = Aloc[i][j] - factor*Aloc[k][j];
-            Bloc[i] = Bloc[i] - factor*Bloc[k];
-        }
-    }
-};
-
-void gauss(double **A, double* B){
-    int i, j, k;
-    int size = sizeof(B)/sizeof(double);
-    double factor;
-
-    
-    /* Gauss elimination */
-    
-    for (k=0; k < size; k++) {
-        if ( fabs(A[k][k]) <= 1e-16 ) {
-            printf("Pivot index %d  ",k);
-            printf("Pivot value %e  ",A[k][k]);
-            Error("Cannot eliminate with such a pivot"); }
-        for (i = k+1 ; i <  size; i++) {
-            factor = A[i][k] / A[k][k];
-            for (j = k+1 ; j < size; j++) 
-                A[i][j] = A[i][j] - A[k][j] * factor;
-            B[i] = B[i] - B[k] * factor; }}
-    
-    /* Back-substitution */
-    
-    for (i = size-1; i >= 0 ; i--) {
-        factor = 0;
-        for (j = i+1 ; j < size; j++)
-            factor += A[i][j] * B[j];
-        B[i] = ( B[i] - factor)/A[i][i]; }
-}
 
 void femInjectGlobal(double **ALoc, double *BLoc, double **AGlob, double *BGlob, int *map, int nLocal){
     for(int i=0; i<2*nLocal; i++){
@@ -151,7 +113,6 @@ double* femFrontalSolve(femProblem *theProblem){
     for(iElem = 0; iElem < nElem; iElem++){
         for(i=0; i<nLocal; i++)
             map[i] = theElements->elem[iElem*nLocal+i];
-        printf("iElem=%d\n", iElem);
         femAssembleLocal(ALoc, BLoc, AGlob, BGlob, map, nLocal);
         for(i=0; i<sizeof(theSolver->old[iElem])/sizeof(int); i++){
             femGausFrontal(ALoc, BLoc, old[iElem][i]);
@@ -186,12 +147,12 @@ void femGlobalSystemAssemble(femProblem *theProblem, double **A, double *B){
             mapY[j] = 2*map[j] + 1;
             x[j]    = theNodes->X[map[j]];
             y[j]    = theNodes->Y[map[j]];}
-        for (iInteg = 0; iInteg < theRule->n; iInteg++){    
+        for (iInteg = 0; iInteg < theRule->n; iInteg++){
+            double weight = theRule->weight[iInteg];     
             double xsi    = theRule->xsi[iInteg];
             double eta    = theRule->eta[iInteg];
-            double weight = theRule->weight[iInteg];  
-            femDiscretePhi2(theSpace,xsi,eta,phi);
-            femDiscreteDphi2(theSpace,xsi,eta,dphidxsi,dphideta);
+            femDiscretePhi2(theSpace,xsi,eta,phi);                  //initialise les fonctions de formes dans phi
+            femDiscreteDphi2(theSpace,xsi,eta,dphidxsi,dphideta);   //initialise les dérivées des fonctions de formes
             double dxdxsi = 0.0;
             double dxdeta = 0.0;
             double dydxsi = 0.0; 
@@ -211,7 +172,6 @@ void femGlobalSystemAssemble(femProblem *theProblem, double **A, double *B){
             if(theProblem->planarStrainStress == AXISYM)
             {
                 for (i = 0; i < theSpace->n; i++) { 
-                    
                     for(j = 0; j < theSpace->n; j++) {
                         A[mapX[i]][mapX[j]] += (dphidx[i] * a * x[i] * dphidx[j] + 
                                                 dphidy[i] * c * x[i] * dphidy[j] +
@@ -242,15 +202,16 @@ void femGlobalSystemAssemble(femProblem *theProblem, double **A, double *B){
                                                 dphidx[i] * c * dphidy[j]) * jac * weight;                                                                                         
                         A[mapY[i]][mapY[j]] += (dphidy[i] * a * dphidy[j] + 
                                                 dphidx[i] * c * dphidx[j]) * jac * weight; 
+                        }
                     }
                 }
                 for (i = 0; i < theSpace->n; i++){
                     B[mapY[i]] -= phi[i] * rho * g * jac * weight; 
                 }
-            }   
+        }   
             
-        }
     }
+
 };
 
 void femBoundaryConstrain(femProblem *theProblem, double **A, double *B){
@@ -714,15 +675,64 @@ void femSystemFree(femSystem* mySystem){
 
 void femDirichlet(double **A, double *B, int size, int myNode, double myValue){
     int i;
-    for (i=0; i < size; i++) {
+    for(i=0; i < size; i++) {
         B[i] -= myValue * A[i][myNode];
-        A[i][myNode] = 0; }
-    for (i=0; i < size; i++) 
-        A[myNode][i] = 0; 
-    A[myNode][myNode] = 1;
+        A[i][myNode] = 0.0; }
+    for(i=0; i < size; i++)
+        A[myNode][i] = 0.0;
+    A[myNode][myNode] = 1.0;
     B[myNode] = myValue;
+
 }
 
 void femNeumann(double *B, int myNode, double myValue){
     B[myNode] += myValue;
+}
+
+double *matrixSolve(double **A, double *B, int size)
+{ 
+    int i, j, k;
+    double factor;
+    /* Gauss elimination */
+    for (k=0; k < size; k++) {
+        if ( A[k][k] == 0 ) Error("zero pivot");
+        for (i = k+1 ; i < size; i++) {
+            factor = A[i][k] / A[k][k];
+            for (j = k+1 ; j < size; j++)
+            A[i][j] = A[i][j] - A[k][j] * factor;
+            B[i] = B[i] - B[k] * factor; }}
+    /* Back-substitution */
+    for (i = (size)-1; i >= 0 ; i--) {
+        factor = 0;
+        for (j = i+1 ; j < size; j++)
+        factor += A[i][j] * B[j];
+        B[i] = ( B[i] - factor)/A[i][i]; }
+    return(B);
+}
+
+    double* xsi = rule->xsi;
+    double* eta = rule->eta;
+    double* phi = calloc(space->n,sizeof(double));
+    double* dphidxsi = calloc(space->n,sizeof(double));
+    double* dphideta = calloc(space->n,sizeof(double));
+    double dxdxsi = 0.0;
+    double dxdeta = 0.0;
+    double dydxsi = 0.0; 
+    double dydeta = 0.0;
+    for(int i=0; i<rule->n; i++){
+        femDiscretePhi2(space,xsi[i],eta[i],phi);
+        femDiscreteDphi2dx(space,xsi[i],eta[i],dphidxsi,dphideta);
+    }
+    for (int i = 0; i < space->n; i++) {  
+        dxdxsi += x[i]*dphidxsi[i];       
+        dxdeta += x[i]*dphideta[i];   
+        dydxsi += y[i]*dphidxsi[i];   
+        dydeta += y[i]*dphideta[i]; }
+    double jac = fabs(dxdxsi * dydeta - dxdeta * dydxsi);
+
+    for (int i = 0; i < space->n; i++) {    
+        dphidx[i] = (dphidxsi[i] * dydeta - dphideta[i] * dydxsi) / jac;       
+        dphidy[i] = (dphideta[i] * dxdxsi - dphidxsi[i] * dxdeta) / jac; 
+    }
+    return jac; 
 }

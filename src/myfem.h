@@ -10,7 +10,6 @@ void                femBandSystemFree(femBandSystem* myBand);
 void                femBandSystemInit(femBandSystem *myBand);
 double*             femBandSystemEliminate(femBandSystem *myBand);
 void                femBandSystemAssemble(femBandSystem* myBandSystem, double *Aloc, double *Bloc, int *map, int nLoc);
-double*             femBandSolve(femProblem *theProblem);
 
 femFrontalSolver*   femFrontalSolverCreate(int size, int nLoc);
 void                femFrontalSolverFree(femFrontalSolver* mySolver);
@@ -31,4 +30,3 @@ void                femBoundaryConstrain(femProblem *theProblem, double **A, dou
 void                femDirichlet(double **A, double *B, int size, int myNode, double myValue);
 void                femNeumann(double *B, int myNode, double myValue);
 double*             femElasticitySolve(femProblem *theProblem);
-

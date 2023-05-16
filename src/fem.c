@@ -37,15 +37,9 @@ void geoFree()
 
 }
 
-
-
-
 void geoSetSizeCallback(double (*geoSize)(double x, double y)) 
 {
     theGeometry.geoSize = geoSize; }
-
-
-
 
 void geoMeshPrint() 
 {
@@ -87,7 +81,6 @@ void geoMeshPrint()
   
   
 }
-
 
 void geoMeshWrite(const char *filename) 
 {
