@@ -75,10 +75,12 @@ void femGetMap(int* elem, int iElem, int *map, int nLocal){
 };
 
 void femAssembleLocal(double **ALoc, double *BLoc, double **AGlob, double *BGlob, int *map, int nLocal){
-    for(int i; i<2*nLocal; i++){
-        for(int j; j<2*nLocal; j++){
-            ALoc[i][j] = AGlob[2*map[i]][2*map[j]+1];}
-        BLoc[i] = BGlob[2*map[i]];
+    for(int i=0; i<2*nLocal; i++){
+        for(int j=0; j<2*nLocal; j++){
+            ALoc[i][j] = AGlob[2*map[i/2]][2*map[j/2]];
+            printf("ALoc[%d][%d]=%f\n", i, j, ALoc[i][j]);
+        }
+        BLoc[i] = BGlob[2*map[i/2]];
     }
 };
 
@@ -96,19 +98,20 @@ void femGausFrontal(double **Aloc, double *Bloc, int elem){
 };
 
 void femInjectGlobal(double **ALoc, double *BLoc, double **AGlob, double *BGlob, int *map, int nLocal){
-    for(int i=0; i<nLocal; i++){
-        for(int j=0; j<nLocal; j++)
-            AGlob[2*map[i]][2*map[j]+1] = ALoc[i][j];
-        BGlob[2*map[i]] = BLoc[i];
+    for(int i=0; i<2*nLocal; i++){
+        for(int j=0; j<2*nLocal; j++)
+            AGlob[2*map[i/2]][2*map[j/2]+1] = ALoc[i][j];
+        BGlob[2*map[i/2]] = BLoc[i];
     }
 };
 
 double* femFrontalSolve(femProblem *theProblem){
     femFrontalSolver *theSolver = theProblem->system->frontSolver;
     femMesh *theElements = theProblem->geometry->theElements;
-    int nElem = theSolver->size;
+    int nElem = theElements->nElem;
     int nLocal = theSolver->nLoc;
-    int i, iElem, map[nLocal];
+    int* map = malloc(nLocal*sizeof(int));
+    int i, iElem;
     double **AGlob = theSolver->A;
     double *BGlob = theSolver->B;
     double **ALoc = theSolver->ALoc;
@@ -117,13 +120,17 @@ double* femFrontalSolve(femProblem *theProblem){
 
     femFrontActivity(theProblem->geometry, theSolver->old);
     for(iElem = 0; iElem < nElem; iElem++){
-        femGetMap(theElements->elem, iElem, map, nLocal);
+        for(i=0; i<nLocal; i++)
+            map[i] = theElements->elem[iElem*nLocal+i];
+        printf("iElem=%d\n", iElem);
         femAssembleLocal(ALoc, BLoc, AGlob, BGlob, map, nLocal);
         for(i=0; i<sizeof(theSolver->old[iElem])/sizeof(int); i++){
             femGausFrontal(ALoc, BLoc, old[iElem][i]);
+            femInjectGlobal(ALoc, BLoc, AGlob, BGlob, map, nLocal);
         }
-        femInjectGlobal(ALoc, BLoc, AGlob, BGlob, map, nLocal);
     }
+    
+    free(map);
     return BGlob;
 };
 
@@ -230,6 +237,12 @@ void femBoundaryConstrain(femProblem *theProblem, double **A, double *B){
 
     int i,node,elem,iInteg, nLocalNode;
     double value,phi[4],dphidxsi[4],dphideta[4];
+    int* map  = calloc(1, 4);
+    int* mapX = calloc(1, 4);
+    int* mapY = calloc(1, 4);
+    double* x = calloc(1, 4);
+    double* y = calloc(1, 4);
+
     
     for(i=0; i<theProblem->nBoundaryConditions; i++){
         theBoundary = conditions[i];
@@ -238,8 +251,14 @@ void femBoundaryConstrain(femProblem *theProblem, double **A, double *B){
         theDomain = theBoundary->domain;
         theEdge = theDomain->mesh;
         nLocalNode = theEdge->nLocalNode;
-        int map[nLocalNode], mapX[nLocalNode], mapY[nLocalNode];
-        double x[nLocalNode], y[nLocalNode];
+        x    = realloc(x, nLocalNode*sizeof(double));
+        y    = realloc(y, nLocalNode*sizeof(double));
+        map  = realloc(map, nLocalNode*sizeof(int));
+        mapX = realloc(mapX, nLocalNode*sizeof(int));
+        mapY = realloc(mapY, nLocalNode*sizeof(int));
+        
+        
+        
         for(elem=0; elem<theDomain->nElem; elem++){
             for(node=0; node<theEdge->nLocalNode; node++){
                 map[node] = theEdge->elem[nLocalNode*elem+node];
@@ -247,6 +266,7 @@ void femBoundaryConstrain(femProblem *theProblem, double **A, double *B){
                 mapY[node] = 2*map[node]+1;
                 x[node] = theEdge->nodes->X[map[node]];
                 y[node] = theEdge->nodes->Y[map[node]];
+                
                 switch (type){
                     case DIRICHLET_X:
                         femDirichlet(A,B,sizeof(A[0])/sizeof(double),mapX[node],value); break;
@@ -308,17 +328,26 @@ void femBoundaryConstrain(femProblem *theProblem, double **A, double *B){
                 }
             }
         }
+
     }
+    free(map);
+    free(mapX);
+    free(mapY);
+    free(x);
+    free(y);
 }
 
 void femFulltoBand(double **Aglob, double **A, int size, int band){
-    int i,j,k;
+    int i,j,k,jend;
     for(i=0; i<size; i++){
-        for(j=0; j<size; j++){
+        printf("loop1\n");
+        for(j=i; j<jend; j++){
+            //printf("loop2\n");
             if(fabs(A[i][j])>1e-10){
                 for(k=0; k<band; k++){
                     if(j+k<size){
-                        A[i][j+k] = Aglob[i][j];
+                        printf("loop3\n");
+                        A[i][k] = Aglob[i][j];
                     }
                 }
             }
@@ -451,7 +480,7 @@ femBandSystem*  femBandSystemCreate(int size, int band)
     int i;
     for (i=1 ; i < size ; i++) 
         myBandSystem->A[i] = myBandSystem->A[i-1] + band - 1;
-        myBandSystem->A[i] = myBandSystem->A[i-1] + size;
+        myBandSystem->Aglob[i] = myBandSystem->Aglob[i-1] + size;
     femBandSystemInit(myBandSystem);
     return(myBandSystem);
 
@@ -477,10 +506,18 @@ double* femBandSystemEliminate(femBandSystem *myBand)
 {
     double  **A, *B, factor;
     int     i, j, k, jend, size, band;
-    A    = myBand->A;
+    A    = myBand->Aglob;
     B    = myBand->B;
     size = myBand->size;
     band = myBand->band;
+
+    /* Check for isolated node */
+
+    for (k = 0; k < size/2; k++) {
+        if ((A[2*k][2*k] == 0) && (A[2*k+1][2*k+1] == 0)) {
+            printf("Warning : disconnected node %d\n", k);
+            A[2*k][2*k] = 1;
+            A[2*k+1][2*k+1] = 1; }}
 
     /* Incomplete Cholesky factorization */ 
 
@@ -505,17 +542,6 @@ double* femBandSystemEliminate(femBandSystem *myBand)
 
     return(myBand->B);
 }
-
-double* femBandSolve(femProblem *theProblem){
-    femBandSystem  *theSystem = theProblem->system->bandSolver;
-    printf("checkin\n");
-    //femGlobalSystemAssemble(theProblem,theSystem->Aglob,theSystem->B);
-    printf("checkout\n");
-    femBoundaryConstrain(theProblem, theSystem->Aglob, theSystem->B);
-    femFulltoBand(theSystem->Aglob, theSystem->A, theSystem->size, theSystem->band);
-          
-    return femBandSystemEliminate(theSystem);
-};
 
 femProblem* femElasticityRead(femGeo* theGeometry, const char *filename, femSolverType iSolver, femRenumType iRenum)
 {
@@ -615,8 +641,8 @@ double *femElasticitySolve(femProblem *theProblem)
             return femFullSystemEliminate(theProblem->system->fullSolver);
             break;
         case FEM_BAND :
-            femGlobalSystemAssemble(theProblem, theProblem->system->bandSolver->A, theProblem->system->bandSolver->B);
-            femBoundaryConstrain(theProblem, theProblem->system->bandSolver->A, theProblem->system->bandSolver->B);
+            femGlobalSystemAssemble(theProblem, theProblem->system->bandSolver->Aglob, theProblem->system->bandSolver->B);
+            femBoundaryConstrain(theProblem, theProblem->system->bandSolver->Aglob, theProblem->system->bandSolver->B);
             femFulltoBand(theProblem->system->bandSolver->Aglob, theProblem->system->bandSolver->A, theProblem->system->bandSolver->size, theProblem->system->bandSolver->band);
             return femBandSystemEliminate(theProblem->system->bandSolver);
             break;
