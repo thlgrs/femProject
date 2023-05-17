@@ -710,6 +710,7 @@ double *matrixSolve(double **A, double *B, int size)
     return(B);
 }
 
+integrate(double *x, double *y, double *dphidx, double*dphidy, femIntegration *rule, femDiscrete *space){
     double* xsi = rule->xsi;
     double* eta = rule->eta;
     double* phi = calloc(space->n,sizeof(double));
