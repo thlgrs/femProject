@@ -1,43 +1,22 @@
 #include "fem.h"
 #include "myfem.h"
+#include <math.h>
 
 
 femFrontalSolver* femFrontalSolverCreate(int size, int nLoc){
     femFrontalSolver *mySolver = malloc(sizeof(femFrontalSolver));
     
     mySolver->size = size;
-    mySolver->nLoc = nLoc;
-    mySolver->old = calloc(size,sizeof(int*));
     mySolver->A = calloc(size,sizeof(double*));
     mySolver->B = calloc(size,sizeof(double));
-    mySolver->ALoc = calloc(2*nLoc, sizeof(double*));    
-    mySolver->BLoc = calloc(2*nLoc, sizeof(double));
-    
-    int i;
-    for(i=0; i<size; i++){
-        mySolver->old[i] = calloc(nLoc,sizeof(int));
-        mySolver->A[i] = calloc(size,sizeof(double));
-    }
-    for(i=0; i<2*nLoc; i++)
-        mySolver->ALoc[i] = calloc(2*nLoc, sizeof(double));
-        mySolver->BLoc[i] = 0;
+    mySolver->active = calloc(2*nLoc, sizeof(double*));    
+    mySolver->b = calloc(2*nLoc, sizeof(double));
         
     return(mySolver);
 };
 
 void femFrontalSolverFree(femFrontalSolver *mySolver){
-    int i;
-    for(i=0; i<2*mySolver->nLoc; i++)
-        free(mySolver->ALoc[i]);
-    for(i=0; i<mySolver->size; i++){
-        free(mySolver->A[i]);
-        free(mySolver->old[i]);
-    }
-    free(mySolver->ALoc);
-    free(mySolver->BLoc);
-    free(mySolver->A);
-    free(mySolver->B);
-    free(mySolver->old);
+
     free(mySolver);
     
 };
@@ -78,6 +57,55 @@ void femGetMap(int* elem, int iElem, int *map, int nLocal){
         map[l] = elem[iElem*nLocal+l];
 };
 
+int* femDisparition(femMesh *theElements, int **disparu, int **nouveau, int *map){
+    femNodes *theNodes = theElements->nodes;
+    int nElem = theElements->nElem;
+    int *elem = theElements->elem;
+    int nLocal = theElements->nLocalNode;
+    int idElem1, idElem2, count, keep, new, nActive = 0;
+    for(int k = 0; k<nElem; ++k){
+        idElem1 = elem[k-1]; idElem2 = elem[k];
+        keep = 0; new = 0;
+        for(int n=0; n<nLocal; n++){
+            double x1 = theNodes->X[idElem1*nLocal+n];
+            double y1 = theNodes->Y[idElem1*nLocal+n];
+            for(int m=0; m<nLocal; m++){
+                double x2 = theNodes->X[idElem2*nLocal+m];
+                double y2 = theNodes->Y[idElem2*nLocal+m];
+
+                if(x1 != x2 && y1 != y2){
+                    disparu[idElem1][n] = idElem1*nLocal+n;}
+                else{
+                    disparu[idElem1][n] = 0;
+                    keep++;
+                }
+
+                for(int i=0; i<nLocal; i++){
+                    double x3 = theNodes->X[idElem1*nLocal+i];
+                    double y3 = theNodes->Y[idElem1*nLocal+i];
+                    if(x2 != x3 || y2 != y3){
+                        nouveau[idElem1][m] = idElem2*nLocal+m;
+                        new++;
+                    }
+                    else{
+                        nouveau[idElem1][m] = 0;
+                    }
+                }
+            }       
+        }
+        nActive = nActive > keep+new ? nActive : keep+new;
+    }
+    return(nActive);
+};
+
+double** femActiveOut(femMesh *theElements, double **active, int iElem, int **disparu, int** nouveau){
+    int elem = theElements->elem[iElem];
+    int* toEject = disparu[iElem];
+    int* toAdd = nouveau[iElem];
+};
+    
+
+
 void femAssembleLocal(double **ALoc, double *BLoc, double **AGlob, double *BGlob, int *map, int nLocal){
     for(int i=0; i<2*nLocal; i++){
         for(int j=0; j<2*nLocal; j++){
@@ -86,7 +114,6 @@ void femAssembleLocal(double **ALoc, double *BLoc, double **AGlob, double *BGlob
         BLoc[i] = BGlob[2*map[i/2]];
     }
 };
-
 
 void femInjectGlobal(double **ALoc, double *BLoc, double **AGlob, double *BGlob, int *map, int nLocal){
     for(int i=0; i<2*nLocal; i++){
@@ -100,24 +127,25 @@ double* femFrontalSolve(femProblem *theProblem){
     femFrontalSolver *theSolver = theProblem->system->frontSolver;
     femMesh *theElements = theProblem->geometry->theElements;
     int nElem = theElements->nElem;
-    int nLocal = theSolver->nLoc;
+    int nLocal;// = theSolver->nLoc;
     int* map = malloc(nLocal*sizeof(int));
     int i, iElem;
     double **AGlob = theSolver->A;
     double *BGlob = theSolver->B;
-    double **ALoc = theSolver->ALoc;
-    double *BLoc = theSolver->BLoc;
-    int **old = theSolver->old;
 
-    femFrontActivity(theProblem->geometry, theSolver->old);
+    double **ALoc;// = theSolver->ALoc;
+    double *BLoc;// = theSolver->BLoc;
+    int **old;// = theSolver->old;
+
+
+
+    femFrontActivity(theProblem->geometry, old);
     for(iElem = 0; iElem < nElem; iElem++){
         for(i=0; i<nLocal; i++)
             map[i] = theElements->elem[iElem*nLocal+i];
-        femAssembleLocal(ALoc, BLoc, AGlob, BGlob, map, nLocal);
-        for(i=0; i<sizeof(theSolver->old[iElem])/sizeof(int); i++){
-            femGausFrontal(ALoc, BLoc, old[iElem][i]);
-        }
-        femInjectGlobal(ALoc, BLoc, AGlob, BGlob, map, nLocal);
+        femAssembleLocal(ALoc, BLoc, AGlob, BGlob, map, nLocal, old[iElem]);
+        femGauss(ALoc, BLoc, sizeof(BLoc)/sizeof(BLoc[0]));
+        femInjectGlobal(ALoc, BLoc, AGlob, BGlob, map, nLocal, old[iElem]);
     }
     free(map);
     return BGlob;
@@ -648,7 +676,7 @@ void femNeumann(double *B, int myNode, double myValue){
     B[myNode] += myValue;
 }
 
-double *matrixSolve(double **A, double *B, int size)
+double *femGauss(double **A, double *B, int size)
 { 
     int i, j, k;
     double factor;
