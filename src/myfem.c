@@ -222,10 +222,10 @@ void femBoundaryConstrain(femProblem *theProblem, double **A, double *B){
     femBoundaryType type;
     femDomain *theDomain;
     femMesh *theEdge;
-    
+    double h = theProblem->geometry->h;
 
-    int i,node,elem,iInteg, nLocalNode;
-    double value,phi[4],dphidxsi[4],dphideta[4];
+    int i,node,iElem, nElem;
+    double value,length, dx, dy;
     int* map  = calloc(1, 4);
     int* mapX = calloc(1, 4);
     int* mapY = calloc(1, 4);
@@ -239,83 +239,42 @@ void femBoundaryConstrain(femProblem *theProblem, double **A, double *B){
         value = theBoundary->value;
         theDomain = theBoundary->domain;
         theEdge = theDomain->mesh;
-        nLocalNode = theEdge->nLocalNode;
-        x    = realloc(x, nLocalNode*sizeof(double));
-        y    = realloc(y, nLocalNode*sizeof(double));
-        map  = realloc(map, nLocalNode*sizeof(int));
-        mapX = realloc(mapX, nLocalNode*sizeof(int));
-        mapY = realloc(mapY, nLocalNode*sizeof(int));
-        
-        
-        
-        for(elem=0; elem<theDomain->nElem; elem++){
-            for(node=0; node<theEdge->nLocalNode; node++){
-                map[node] = theEdge->elem[nLocalNode*elem+node];
-                mapX[node] = 2*map[node];
-                mapY[node] = 2*map[node]+1;
-                x[node] = theEdge->nodes->X[map[node]];
-                y[node] = theEdge->nodes->Y[map[node]];
-                
-                switch (type){
-                    case DIRICHLET_X:
-                        femDirichlet(A,B,sizeof(A[0])/sizeof(double),mapX[node],value); break;
-                    case DIRICHLET_Y:  
-                        femDirichlet(A,B,sizeof(A[0])/sizeof(double),mapY[node],value); break;
-                    case NEUMANN_X:
-                        //femNeumann(B,mapX[node],value); 
-                        break;
-                    case NEUMANN_Y:
-                        //femNeumann(B,mapY[node],value); 
-                        break;
-                    default: break;
-                }       
-            }
-            if(type == NEUMANN_X || type == NEUMANN_Y){
-                for (iInteg=0; iInteg < theRule->n; iInteg++){    
-                    double xsi    = theRule->xsi[iInteg];
-                    double eta    = theRule->eta[iInteg];
-                    double weight = theRule->weight[iInteg];  
-                    femDiscretePhi2(theSpace,xsi,eta,phi);
-                    femDiscreteDphi2(theSpace,xsi,eta,dphidxsi,dphideta);
-                    double dxdxsi = 0.0;
-                    double dxdeta = 0.0;
-                    double dydxsi = 0.0; 
-                    double dydeta = 0.0;
-                    switch (type){
-                        case NEUMANN_N:
-                            dxdxsi = value;
-                            dydeta = value;
-                            break;
-                        case NEUMANN_T:
-                            dxdeta = value;
-                            dydeta = value; 
-                            break;
-                        default: break;
-                    }
-                    for (i = 0; i < nLocalNode; i++) {  
-                        dxdxsi += x[i]*dphidxsi[i];       
-                        dxdeta += x[i]*dphideta[i];   
-                        dydxsi += y[i]*dphidxsi[i];   
-                        dydeta += y[i]*dphideta[i]; }
-                    
-                    double jac = fabs(dxdxsi * dydeta - dxdeta * dydxsi);
+        nElem = theDomain->nElem;
+        x    = realloc(x, nElem*sizeof(double));
+        y    = realloc(y, nElem*sizeof(double));
+        map  = realloc(map, nElem*sizeof(int));
+        mapX = realloc(mapX, nElem*sizeof(int));
+        mapY = realloc(mapY, nElem*sizeof(int));
 
-                    for (i = 0; i < theEdge->nLocalNode; i++){
-                        switch (type){
-                            case NEUMANN_X:
-                                femNeumann(B,mapX[i],phi[i]*value*jac*weight);
-                                break;
-                            case NEUMANN_Y:
-                                femNeumann(B,mapY[i],phi[i]*value*jac*weight);
-                                break;
-                            default: 
-                                B[mapX[i]] += phi[i] * value * jac * weight;
-                                B[mapY[i]] += phi[i] * value * jac * weight;
-                                break;
-                        }
-                    }
-                }
-            }
+        map[0] = theEdge->elem[0];
+        mapX[0] = 2*map[0];
+        mapY[0] = 2*map[0]+1;
+        x[0] = theEdge->nodes->X[map[0]];
+        y[0] = theEdge->nodes->Y[map[0]];
+
+        
+        for(node=0; node<nElem; ++node){
+            map[node] = theEdge->elem[node];
+            mapX[node] = 2*map[node];
+            mapY[node] = 2*map[node]+1;
+            x[node] = theEdge->nodes->X[map[node]];
+            y[node] = theEdge->nodes->Y[map[node]];
+            dx = x[node]-x[node-1]; dy = y[node]-y[node-1];
+            length += sqrt(dx*dx+dy*dy);
+
+            switch (type){
+                case DIRICHLET_X:
+                    femDirichlet(A,B,sizeof(A[0])/sizeof(double),mapX[node],value); break;
+                case DIRICHLET_Y:  
+                    femDirichlet(A,B,sizeof(A[0])/sizeof(double),mapY[node],value); break;
+                case NEUMANN_X:
+                    femNeumann(B,mapX[node],((3-sqrt(3))/3)*value*length/2); 
+                    break;
+                case NEUMANN_Y:
+                    femNeumann(B,mapY[node],((3-sqrt(3))/3)*value*length/2); 
+                    break;
+                default: break;
+            }       
         }
 
     }
@@ -710,9 +669,7 @@ double *matrixSolve(double **A, double *B, int size)
     return(B);
 }
 
-integrate(double *x, double *y, double *dphidx, double*dphidy, femIntegration *rule, femDiscrete *space){
-    double* xsi = rule->xsi;
-    double* eta = rule->eta;
+double integrate(double *x, double *y, double *dphidx, double*dphidy, femIntegration *rule, femDiscrete *space){
     double* phi = calloc(space->n,sizeof(double));
     double* dphidxsi = calloc(space->n,sizeof(double));
     double* dphideta = calloc(space->n,sizeof(double));
@@ -721,8 +678,8 @@ integrate(double *x, double *y, double *dphidx, double*dphidy, femIntegration *r
     double dydxsi = 0.0; 
     double dydeta = 0.0;
     for(int i=0; i<rule->n; i++){
-        femDiscretePhi2(space,xsi[i],eta[i],phi);
-        femDiscreteDphi2dx(space,xsi[i],eta[i],dphidxsi,dphideta);
+        femDiscretePhi2(space,rule->xsi[i],rule->eta[i],phi);
+        femDiscreteDphi2(space,rule->xsi[i],rule->eta[i],dphidxsi,dphideta);
     }
     for (int i = 0; i < space->n; i++) {  
         dxdxsi += x[i]*dphidxsi[i];       
