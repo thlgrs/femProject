@@ -80,21 +80,7 @@ double* femFrontalSolve(femProblem *theProblem){
 };
 
 void femFulltoBand(femFullSystem *theFull, femBandSystem *theBand){
-    int i,j,k,jend;
-    for(i=0; i<size; i++){
-        printf("loop1\n");
-        for(j=i; j<jend; j++){
-            //printf("loop2\n");
-            if(fabs(A[i][j])>1e-10){
-                for(k=0; k<band; k++){
-                    if(j+k<size){
-                        printf("loop3\n");
-                        A[i][k] = Aglob[i][j];
-                    }
-                }
-            }
-        }
-    }
+
 }
 
 
