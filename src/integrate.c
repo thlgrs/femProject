@@ -53,6 +53,7 @@ femLocalPlan(femDiscrete* space, double **A, double *dx, double *dy, double weig
             A[i+(n-2)][j] += jac * weight * (dy[i+(n-2)]*coeff[0]*dy[j] + dx[i+(n-2)]*coeff[2]*dx[j]);
         }
     }
+
 }
 
 femLocalAxsym(femDiscrete* space, double **A, double* x, double* phi, double *dx, double *dy, double weight, double jac, double* coeff){

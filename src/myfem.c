@@ -235,9 +235,9 @@ double* femBandSystemEliminate(femBandSystem *myBand)
     for (k = 0; k < size/2; k++) {
         if ((A[2*k][2*k] == 0) && (A[2*k+1][2*k+1] == 0)) {
             printf("Warning : disconnected node %d\n", k);
-            A[2*k][2*k] = 1;
-            A[2*k+1][2*k+1] = 1; }}
-
+            A[2*k][2*k] += 1;
+            A[2*k+1][2*k+1] += 1; }}
+    
     /* Incomplete Cholesky factorization */ 
 
     for (k=0; k < size; k++) {
@@ -269,14 +269,17 @@ void femBandSystemAssemble(femBandSystem* myBandSystem, double *Aloc, double *Bl
         int myRow = 2*map[i];
         for(j = 0; j < nLoc; j++) {
             int myCol = 2*map[j];
-            if (myCol >= myRow ){  
-                myBandSystem->A[myRow][myCol]   += Aloc[2*nLoc*i+2*j];
-                myBandSystem->A[myRow][myCol+1] += Aloc[2*nLoc*i+2*j+1];}
+            if (myCol >= myRow ){ 
+                myBandSystem->A[2*map[i]][2*map[j]]     += Aloc[2*i*nLoc+2*j];
+                myBandSystem->A[2*map[i]][2*map[j]+1]   += Aloc[2*nLoc*i+2*j+1];
+                myBandSystem->A[2*map[i]+1][2*map[j]]   += Aloc[(2*i+1)*nLoc+2*j];
+                myBandSystem->A[2*map[i]+1][2*map[j]+1] += Aloc[(2*i+1)*nLoc+2*j+1];
+            }
         }
         myBandSystem->B[myRow] += Bloc[2*i];
         myBandSystem->B[myRow+1] += Bloc[2*i+1]; }
+    
 }
-
 
 femFrontalSolver* femFrontalSolverCreate(int size, int nActive){
     femFrontalSolver *mySolver = malloc(sizeof(femFrontalSolver));
@@ -410,7 +413,7 @@ femSystem* femSystemCreate(int size, femSolverType iSolver, femRenumType iRenum,
             system->bandSystem = femBandSystemCreate(size,band); break;
         case FEM_FRONT :
             system->fullSystem = femFullSystemCreate(size);
-            femRenumberElem(theGeometry, iRenum);
+            //femRenumberElem(theGeometry, iRenum);
             int nLoc = theGeometry->theElements->nLocalNode;
             int** disparus = malloc(theGeometry->theElements->nElem*sizeof(int*));
             int** nouveaux = malloc(theGeometry->theElements->nElem*sizeof(int*));
@@ -775,6 +778,8 @@ void femLocalPlan(femDiscrete* space, double **A, double* B, double* x, double* 
     for(int i = 0; i < n; i++){
         B[i+1] -= x[i+1] * coeff[3] * jac * weight;
     }
+
+    
 }
 
 void femLocalAxsym(femDiscrete* space, double **A, double* B, double* x, double* phi, double *dx, double *dy, double* coeff, double jac, double weight){
