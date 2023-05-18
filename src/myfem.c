@@ -263,14 +263,21 @@ double* femBandSystemEliminate(femBandSystem *myBand)
     return(myBand->B);
 }
 
-void femBandSystemAssemble(femBandSystem* myBandSystem, double *Aloc, double *Bloc, int *map, int nLoc)
+void femBandSystemAssemble(femBandSystem* myBandSystem, double **Aloc, double *Bloc, int *map, int nLoc)
 {
     int i,j;
     for (i = 0; i < nLoc; i++) { 
         int myRow = map[i];
         for(j = 0; j < nLoc; j++) {
             int myCol = map[j];
-            if (myCol >= myRow)  myBandSystem->A[myRow][myCol] += Aloc[i*nLoc+j]; }
+            if (myCol >= myRow) {
+                myBandSystem->A[2*myRow][2*myCol] += Aloc[2*i][2*j];
+                myBandSystem->A[2*myRow][2*myCol+1] += Aloc[2*i][2*j+1];
+                if(2*myCol >= 2*myRow+1) 
+                    myBandSystem->A[2*myRow+1][2*myCol] += Aloc[2*i+1][2*j];
+                myBandSystem->A[2*myRow+1][2*myCol+1] += Aloc[2*i+1][2*j+1];
+            }
+        }
         myBandSystem->B[myRow] += Bloc[i]; }
 }
 
@@ -414,7 +421,7 @@ femSystem* femSystemCreate(int size, femSolverType iSolver, femRenumType iRenum,
                 nouveaux[i] = calloc(nLoc,sizeof(int));
             }
             int nAct = nActive(theGeometry->theElements,disparus,nouveaux);
-            system->frontSolver = femFrontalSolverCreate(size,nActive); 
+            system->frontSolver = femFrontalSolverCreate(size,nAct); 
             system->frontSolver->disparus = disparus;
             system->frontSolver->nouveaux = nouveaux;
             break;
@@ -424,8 +431,8 @@ femSystem* femSystemCreate(int size, femSolverType iSolver, femRenumType iRenum,
 
 double *femElasticitySolve(femProblem *theProblem)
 {   
+    femGlobalSystemAssemble(theProblem, theProblem->system->fullSystem->A, theProblem->system->fullSystem->B);
     switch(theProblem->system->solverType) {
-        femGlobalSystemAssemble(theProblem, theProblem->system->fullSystem->A, theProblem->system->fullSystem->B);
         case FEM_FULL : 
             return femFullSystemEliminate(theProblem->system->fullSystem);
             break;
@@ -459,7 +466,7 @@ void femSystemFree(femSystem* mySystem){
             femFullSystemFree(mySystem->fullSystem); 
             femBandSystemFree(mySystem->bandSystem); break;
         case FEM_FRONT : 
-            femfullSystemFree(mySystem->fullSystem);
+            femFullSystemFree(mySystem->fullSystem);
             femFrontalSolverFree(mySystem->frontSolver); break;
     }
     free(mySystem);
@@ -528,7 +535,7 @@ void femGlobalSystemAssemble(femProblem *theProblem, double **A, double *B){
             }
             else if(theProblem->planarStrainStress == PLANAR_STRESS || theProblem->planarStrainStress == PLANAR_STRAIN)
             {
-                femLocalPlanar(theSpace, Aloc, Bloc, x, phi, dphidx, dphidy, coeff, jac, weight);
+                femLocalPlan(theSpace, Aloc, Bloc, x, phi, dphidx, dphidy, coeff, jac, weight);
             }
             for (i = 0; i < theSpace->n; i++)
             {
@@ -540,8 +547,12 @@ void femGlobalSystemAssemble(femProblem *theProblem, double **A, double *B){
                     }
                     else if(type == NEUMANN_X || type == NEUMANN_Y){
                         double dx, dy;
-                        if(i==0) dx = x[i]-x[theSpace->n-1], dy = y[i]-y[theSpace->n-1];
-                        else dx = x[i]-x[i-1], dy = y[i]-y[i-1];
+                        if(i==0) {
+                            dx = x[i]-x[theSpace->n-1];
+                            dy = y[i]-y[theSpace->n-1];}
+                        else {
+                            dx = x[i]-x[i-1];
+                            dy = y[i]-y[i-1];}
                         constrain(type,Aloc,Bloc,i,condition->value, dx, dy);
                     }
                        
