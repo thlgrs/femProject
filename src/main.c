@@ -16,7 +16,7 @@
 int main(void)
 {   
     femSolverType solverType = FEM_BAND;
-    femRenumType renumType = FEM_XNUM;
+    femRenumType renumType = FEM_YNUM;
 
     femGeo* theGeometry = geoGetGeometry();  
     geoMeshRead("../data/mesh.txt");
