@@ -266,11 +266,15 @@ void femBandSystemAssemble(femBandSystem* myBandSystem, double *Aloc, double *Bl
 {
     int i,j;
     for (i = 0; i < nLoc; i++) { 
-        int myRow = map[i];
+        int myRow = 2*map[i];
         for(j = 0; j < nLoc; j++) {
-            int myCol = map[j];
-            if (myCol >= myRow)  myBandSystem->A[myRow][myCol] += Aloc[i*nLoc+j]; }
-        myBandSystem->B[myRow] += Bloc[i]; }
+            int myCol = 2*map[j];
+            if (myCol >= myRow ){  
+                myBandSystem->A[myRow][myCol]   += Aloc[2*nLoc*i+2*j];
+                myBandSystem->A[myRow][myCol+1] += Aloc[2*nLoc*i+2*j+1];}
+        }
+        myBandSystem->B[myRow] += Bloc[2*i];
+        myBandSystem->B[myRow+1] += Bloc[2*i+1]; }
 }
 
 
