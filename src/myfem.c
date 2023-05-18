@@ -48,7 +48,6 @@ void femFrontalSolverInit(femFrontalSolver *mySolver){
 
 };
 
-
 void femAssembleLocal(double **ALoc, double *BLoc, double **AGlob, double *BGlob, int *map, int nLocal){
     for(int i=0; i<2*nLocal; i++){
         for(int j=0; j<2*nLocal; j++){
@@ -263,21 +262,14 @@ double* femBandSystemEliminate(femBandSystem *myBand)
     return(myBand->B);
 }
 
-void femBandSystemAssemble(femBandSystem* myBandSystem, double **Aloc, double *Bloc, int *map, int nLoc)
+void femBandSystemAssemble(femBandSystem* myBandSystem, double *Aloc, double *Bloc, int *map, int nLoc)
 {
     int i,j;
     for (i = 0; i < nLoc; i++) { 
         int myRow = map[i];
         for(j = 0; j < nLoc; j++) {
             int myCol = map[j];
-            if (myCol >= myRow) {
-                myBandSystem->A[2*myRow][2*myCol] += Aloc[2*i][2*j];
-                myBandSystem->A[2*myRow][2*myCol+1] += Aloc[2*i][2*j+1];
-                if(2*myCol >= 2*myRow+1) 
-                    myBandSystem->A[2*myRow+1][2*myCol] += Aloc[2*i+1][2*j];
-                myBandSystem->A[2*myRow+1][2*myCol+1] += Aloc[2*i+1][2*j+1];
-            }
-        }
+            if (myCol >= myRow)  myBandSystem->A[myRow][myCol] += Aloc[i*nLoc+j]; }
         myBandSystem->B[myRow] += Bloc[i]; }
 }
 
@@ -401,7 +393,9 @@ femProblem* femElasticityRead(femGeo* theGeometry, const char *filename, femSolv
 femSystem* femSystemCreate(int size, femSolverType iSolver, femRenumType iRenum, femGeo *theGeometry){
     femSystem* system = malloc(sizeof(femSystem));
     system->solverType = iSolver;
-
+    int nLocal = theGeometry->theElements->nLocalNode;
+    system->local = femFullSystemCreate(nLocal);
+    
     switch(iSolver) {
         case FEM_FULL :
             system->fullSystem = femFullSystemCreate(size); break;
@@ -431,15 +425,19 @@ femSystem* femSystemCreate(int size, femSolverType iSolver, femRenumType iRenum,
 
 double *femElasticitySolve(femProblem *theProblem)
 {   
-    femGlobalSystemAssemble(theProblem, theProblem->system->fullSystem->A, theProblem->system->fullSystem->B);
+    
+    
     switch(theProblem->system->solverType) {
         case FEM_FULL : 
+            femGlobalSystemAssemble(theProblem);
             return femFullSystemEliminate(theProblem->system->fullSystem);
             break;
         case FEM_BAND :
+            femGlobalSystemAssemble(theProblem);
             return femBandSystemEliminate(theProblem->system->bandSystem);
             break;
         case FEM_FRONT :
+            femGlobalSystemAssemble(theProblem);  
             femFrontalSolve(theProblem);
             double *soluce;
             return soluce;
@@ -472,7 +470,14 @@ void femSystemFree(femSystem* mySystem){
     free(mySystem);
 }
 
-void femGlobalSystemAssemble(femProblem *theProblem, double **A, double *B){
+int nodeIndex(double x, double y, femNodes* theNodes){
+    for(int node=0; node < theNodes->nNodes; node++){
+        if (x == theNodes->X[node] && y == theNodes->Y[node]) return node;
+    }
+
+}
+
+void femGlobalSystemAssemble(femProblem *theProblem){
     femIntegration *theRule = theProblem->rule;
     femDiscrete    *theSpace = theProblem->space;
     femGeo         *theGeometry = theProblem->geometry;
@@ -480,11 +485,11 @@ void femGlobalSystemAssemble(femProblem *theProblem, double **A, double *B){
     femNodes       *theNodes = theElements->nodes;
 
     double x[4],y[4],phi[4],dphidxsi[4],dphideta[4],dphidx[4],dphidy[4],coeff[4];
-    int iElem,iInteg,iEdge,i,j,d,map[4],mapX[4],mapY[4],ctr[4];
+    int iElem,iInteg,iEdge,i,j,d,map[4],mapX[4],mapY[4],ctr[4],globMap[4];
 
-    double **Aloc = theProblem->system->Aloc;
-    double *Bloc = theProblem->system->Bloc;
-    
+    double **A   = theProblem->system->local->A;
+    double *Aloc = theProblem->system->local->A[0];
+    double *Bloc = theProblem->system->local->B;
     
     double a   = theProblem->A;
     double b   = theProblem->B;
@@ -495,17 +500,17 @@ void femGlobalSystemAssemble(femProblem *theProblem, double **A, double *B){
 
     int nLocal = theElements->nLocalNode;
     for (iElem = 0; iElem < theElements->nElem; iElem++) {
-        for (i = 0; i < theSpace->n; i++)      
-            Bloc[i] = 0;
-            for (j = 0; j < theSpace->n; j++) 
-                Aloc[i] = 0;
+        for (i = 0; i < theSpace->n; i++)      Bloc[i] = 0;
+        for (i = 0; i < (theSpace->n)*(theSpace->n); i++) Aloc[i] = 0;
         for (j=0; j < nLocal; j++) {
-            map[j]  = theElements->elem[iElem*nLocal+j]; //num noeuds de l'élément iElem
+            map[j]  = theElements->elem[iElem*nLocal+j]; 
             mapX[j] = 2*map[j];
             mapY[j] = 2*map[j] + 1;
             x[j]    = theNodes->X[map[j]];
             y[j]    = theNodes->Y[map[j]];
-            ctr[j]  = theProblem->constrainedNodes[map[j]];
+            ctr[j]  = theProblem->constrainedNodes[map[j]]; 
+            map[j] = nodeIndex(x[j],y[j],theGeometry->theNodes); //num noeuds de l'élément iElem
+            printf("map[%d] = %d\n",j,map[j]);
         }
         for (iInteg = 0; iInteg < theRule->n; iInteg++){
             double weight = theRule->weight[iInteg];     
@@ -523,19 +528,17 @@ void femGlobalSystemAssemble(femProblem *theProblem, double **A, double *B){
                 dydxsi += y[i]*dphidxsi[i];   
                 dydeta += y[i]*dphideta[i]; }
             double jac = fabs(dxdxsi * dydeta - dxdeta * dydxsi);
-
             for (i = 0; i < theSpace->n; i++) {    
                 dphidx[i] = (dphidxsi[i] * dydeta - dphideta[i] * dydxsi) / jac;       
                 dphidy[i] = (dphideta[i] * dxdxsi - dphidxsi[i] * dxdeta) / jac; } 
                       
-
             if(theProblem->planarStrainStress == AXISYM)
             {
-                femLocalAxsym(theSpace, Aloc, Bloc, x, phi, dphidx, dphidy, coeff, jac, weight);
+                femLocalAxsym(theSpace, A, Bloc, x, phi, dphidx, dphidy, coeff, jac, weight);
             }
             else if(theProblem->planarStrainStress == PLANAR_STRESS || theProblem->planarStrainStress == PLANAR_STRAIN)
             {
-                femLocalPlan(theSpace, Aloc, Bloc, x, phi, dphidx, dphidy, coeff, jac, weight);
+                femLocalPlan(theSpace, A, Bloc, x, phi, dphidx, dphidy, coeff, jac, weight);
             }
             for (i = 0; i < theSpace->n; i++)
             {
@@ -543,7 +546,7 @@ void femGlobalSystemAssemble(femProblem *theProblem, double **A, double *B){
                     femBoundaryCondition *condition = theProblem->conditions[map[i]];
                     femBoundaryType type = condition->type;
                     if(type == DIRICHLET_X || type == DIRICHLET_Y){
-                        constrain(type,Aloc,Bloc,i,condition->value,1,1);
+                        constrain(type,theProblem->system->local,i,condition->value,1,1);
                     }
                     else if(type == NEUMANN_X || type == NEUMANN_Y){
                         double dx, dy;
@@ -553,7 +556,7 @@ void femGlobalSystemAssemble(femProblem *theProblem, double **A, double *B){
                         else {
                             dx = x[i]-x[i-1];
                             dy = y[i]-y[i-1];}
-                        constrain(type,Aloc,Bloc,i,condition->value, dx, dy);
+                        constrain(type,theProblem->system->local,i,condition->value, dx, dy);
                     }
                        
                 }
@@ -561,6 +564,7 @@ void femGlobalSystemAssemble(femProblem *theProblem, double **A, double *B){
         }
         switch(theProblem->system->solverType){
             case FEM_FULL:
+                printf("in\n");
                 femFullSystemAssemble(theProblem->system->fullSystem,Aloc,Bloc,map,nLocal); break;
             case FEM_BAND:
                 femBandSystemAssemble(theProblem->system->bandSystem,Aloc,Bloc,map,nLocal); break;
@@ -570,22 +574,26 @@ void femGlobalSystemAssemble(femProblem *theProblem, double **A, double *B){
     }
 };
 
-void constrain(femBoundaryType type, double** A, double* B, int myNode, double value, double dx, double dy){
+void constrain(femBoundaryType type, femFullSystem* system, int myNode, double value, double dx, double dy){
+    double** A = system->A;
+    double* B = system->B;
+    int size = system->size;
+
     double length = sqrt(dx*dx+dy*dy);
     double cos = dx/length;
     double sin = dy/length;
     switch (type){
         case DIRICHLET_X:
-            femDirichlet(A,B,sizeof(A[0])/sizeof(double),2*myNode,value); break;
+            femDirichlet(A,B,size,myNode,value); break;
         case DIRICHLET_Y:  
-            femDirichlet(A,B,sizeof(A[0])/sizeof(double),2*myNode+1,value); break;
+            femDirichlet(A,B,size,myNode,value); break;
         case NEUMANN_X: //value = ((3-sqrt(3))/3)*value*length/2
             value = ((3-sqrt(3))/3)*value*length/2;
             femNeumann(B,2*myNode,value); //line integral approximation 2point gauss
             break;                                                   // value = derivative of the flux on boundary
         case NEUMANN_Y: //value = ((3-sqrt(3))/3)*value*length/2
             value = ((3-sqrt(3))/3)*value*length/2;
-            femNeumann(B,2*myNode+1,value); 
+            femNeumann(B,myNode,value); 
             break;
         /*A IMPOSER AVEC TABLEAU METHODE DES DEPLACEMENTS*/
         case NEUMANN_N:

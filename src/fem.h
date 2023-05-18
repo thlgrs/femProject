@@ -103,8 +103,7 @@ typedef struct {
 } femFrontalSolver;
 
 typedef struct {
-    double *Bloc;
-    double **Aloc;
+    femFullSystem *local;
     femRenumType renum;
     femSolverType solverType;
     femFullSystem *fullSystem;
@@ -176,7 +175,7 @@ void                femFullSystemInit(femFullSystem* mySystem);
 void                femFullSystemAlloc(femFullSystem* mySystem, int size);
 double*             femFullSystemEliminate(femFullSystem* mySystem);
 void                femFullSystemConstrain(femFullSystem* mySystem, int myNode, double value);
-void                femFullSystemAssemble(femFullSystem* mySystem, double **Aloc, double *Bloc, int *map, int nLoc);
+void                femFullSystemAssemble(femFullSystem* mySystem, double *Aloc, double *Bloc, int *map, int nLoc);
 
 double              femMin(double *x, int n);
 double              femMax(double *x, int n);
