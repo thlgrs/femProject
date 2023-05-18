@@ -37,7 +37,7 @@ double femIntegrate(femIntegration* rule, double* points, double jac){
     return I*jac;
 };
 
-femLocal(femDiscrete* space, double **A, double *dx, double *dy, double weight, double jac, double* coeff){
+femLocalPlan(femDiscrete* space, double **A, double *dx, double *dy, double weight, double jac, double* coeff){
     int n = space->n;
     for(int i=0; i<2; i++){
         for(int j=0; j<2; j++){
@@ -54,6 +54,33 @@ femLocal(femDiscrete* space, double **A, double *dx, double *dy, double weight, 
         }
     }
 }
+
+femLocalAxsym(femDiscrete* space, double **A, double* x, double* phi, double *dx, double *dy, double weight, double jac, double* coeff){
+    int n = space->n;
+    for(int i=0; i<2; i++){
+        for(int j=0; j<2; j++){
+            A[i][j] += jac * weight * ( dx[i] * coeff[0] * x[i] * dx[j] + 
+                                        dy[i] * coeff[2] * x[i] * dy[j] +
+                                        phi[i] * (coeff[1] *dx[j] + coeff[0] * phi[j]/x[i]) +
+                                        dx[i] *coeff[1] * phi[j]);
+        }
+        for(int j=(n-2); j<n; j++){
+            A[i][j] += jac * weight * ( dx[i] * coeff[1] * x[i] * dy[j] + 
+                                        dy[i] * coeff[2] * x[i] * dx[j] +
+                                        phi[i] * coeff[1] * dy[j]);
+        }
+        for(int j=0; j<2; j++){
+            A[i+(n-2)][j] += jac * weight * (dy[i] * coeff[1] * x[i] * dx[j] + 
+                                             dx[i] * coeff[2] * x[i] * dy[j] +
+                                             dy[i] * coeff[1] * phi[j]);
+        }
+        for(int j=(n-2); j<n; j++){
+            A[i+(n-2)][j] += jac * weight * (dy[i] * coeff[0] * x[i] * dy[j] + 
+                                             dx[i] * coeff[2] * x[i] * dx[j]);
+        }
+    }
+}
+
 
 double *matrixSolve(double **A, double *B, int size)
 { 
@@ -76,3 +103,43 @@ double *matrixSolve(double **A, double *B, int size)
     return(B);
 }
 
+/*AXISYMETRIC
+for (i = 0; i < theSpace->n; i++) { 
+    for(j = 0; j < theSpace->n; j++) {
+        A[mapX[i]][mapX[j]] += (dphidx[i] * a * x[i] * dphidx[j] + 
+                                dphidy[i] * c * x[i] * dphidy[j] +
+                                phi[i] * (b *dphidx[j] + a * phi[j]/x[i]) +
+                                dphidx[i] *b * phi[j]) * jac * weight;                                                                                          
+        A[mapX[i]][mapY[j]] += (dphidx[i] * b * x[i] * dphidy[j] + 
+                                dphidy[i] * c * x[i] * dphidx[j] +
+                                phi[i] * b * dphidy[j]) * jac * weight;                                                                                           
+        A[mapY[i]][mapX[j]] += (dphidy[i] * b * x[i] * dphidx[j] + 
+                                dphidx[i] * c * x[i] * dphidy[j] +
+                                dphidy[i] * b * phi[j]) * jac * weight;                                                                                            
+        A[mapY[i]][mapY[j]] += (dphidy[i] * a * x[i] * dphidy[j] + 
+                                dphidx[i] * c * x[i] * dphidx[j]) * jac * weight; }}
+
+for (i = 0; i < theSpace->n; i++){
+    B[mapY[i]] -= x[i] * phi[i] * rho * g * jac * weight;
+}
+*/
+
+
+/*PLANNAR
+for (i = 0; i < theSpace->n; i++) { 
+    for(j = 0; j < theSpace->n; j++) {
+        A[mapX[i]][mapX[j]] += (dphidx[i] * a * dphidx[j] + 
+                                dphidy[i] * c * dphidy[j]) * jac * weight;                                                                                          
+        A[mapX[i]][mapY[j]] += (dphidx[i] * b * dphidy[j] + 
+                                dphidy[i] * c * dphidx[j]) * jac * weight;                                                                                           
+        A[mapY[i]][mapX[j]] += (dphidy[i] * b * dphidx[j] + 
+                                dphidx[i] * c * dphidy[j]) * jac * weight;                                                                                         
+        A[mapY[i]][mapY[j]] += (dphidy[i] * a * dphidy[j] + 
+                                dphidx[i] * c * dphidx[j]) * jac * weight; 
+        }
+    }
+}
+for (i = 0; i < theSpace->n; i++){
+    B[mapY[i]] -= phi[i] * rho * g * jac * weight; 
+}
+*/
