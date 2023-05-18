@@ -3,6 +3,7 @@
 
 
 femFrontalSolver* femFrontalSolverCreate(int size, int nLoc){
+    femFullSystemCreate(size);
     femFrontalSolver *mySolver = malloc(sizeof(femFrontalSolver));
     
     mySolver->size = size;
@@ -97,30 +98,16 @@ void femInjectGlobal(double **ALoc, double *BLoc, double **AGlob, double *BGlob,
 };
 
 double* femFrontalSolve(femProblem *theProblem){
+    femFullSystem *theSystem = theProblem->system->fullSystem;
     femFrontalSolver *theSolver = theProblem->system->frontSolver;
     femMesh *theElements = theProblem->geometry->theElements;
+    double** Aglob = theSystem->A;
+    double* Bglob = theSystem->B;
     int nElem = theElements->nElem;
-    int nLocal = theSolver->nLoc;
-    int* map = malloc(nLocal*sizeof(int));
-    int i, iElem;
-    double **AGlob = theSolver->A;
-    double *BGlob = theSolver->B;
-    double **ALoc = theSolver->ALoc;
-    double *BLoc = theSolver->BLoc;
-    int **old = theSolver->old;
+    int nLocal = theElements->nLocalNode;
+    double** active = theSolver->active;
+    double*  b = theSolver->b;
 
-    femFrontActivity(theProblem->geometry, theSolver->old);
-    for(iElem = 0; iElem < nElem; iElem++){
-        for(i=0; i<nLocal; i++)
-            map[i] = theElements->elem[iElem*nLocal+i];
-        femAssembleLocal(ALoc, BLoc, AGlob, BGlob, map, nLocal);
-        for(i=0; i<sizeof(theSolver->old[iElem])/sizeof(int); i++){
-            femGausFrontal(ALoc, BLoc, old[iElem][i]);
-        }
-        femInjectGlobal(ALoc, BLoc, AGlob, BGlob, map, nLocal);
-    }
-    free(map);
-    return BGlob;
 };
 
 void femGlobalSystemAssemble(femProblem *theProblem, double **A, double *B){
@@ -268,9 +255,18 @@ void femBoundaryConstrain(femProblem *theProblem, double **A, double *B){
                 case DIRICHLET_Y:  
                     femDirichlet(A,B,sizeof(A[0])/sizeof(double),mapY[node],value); break;
                 case NEUMANN_X:
-                    femNeumann(B,mapX[node],((3-sqrt(3))/3)*value*length/2); 
-                    break;
+                    femNeumann(B,mapX[node],((3-sqrt(3))/3)*value*length/2); //line integral approximation 2point gauss
+                    break;                                                   // value = derivative of the flux on boundary
                 case NEUMANN_Y:
+                    femNeumann(B,mapY[node],((3-sqrt(3))/3)*value*length/2); 
+                    break;
+                /*A IMPOSER AVEC TABLEAU METHODE DES DEPLACEMENTS*/
+                case NEUMANN_N:
+                    femNeumann(B,mapX[node],((3-sqrt(3))/3)*value*length/2); 
+                    femNeumann(B,mapY[node],((3-sqrt(3))/3)*value*length/2); 
+                    break;
+                case NEUMANN_T:
+                    femNeumann(B,mapX[node],((3-sqrt(3))/3)*value*length/2); 
                     femNeumann(B,mapY[node],((3-sqrt(3))/3)*value*length/2); 
                     break;
                 default: break;
@@ -285,7 +281,7 @@ void femBoundaryConstrain(femProblem *theProblem, double **A, double *B){
     free(y);
 }
 
-void femFulltoBand(double **Aglob, double **A, int size, int band){
+void femFulltoBand(femFullSystem *theFull, femBandSystem *theBand){
     int i,j,k,jend;
     for(i=0; i<size; i++){
         printf("loop1\n");
@@ -417,18 +413,14 @@ int femMeshComputeBand(femMesh *theMesh)
 femBandSystem*  femBandSystemCreate(int size, int band)
 {
     femBandSystem *myBandSystem = malloc(sizeof(femBandSystem));
-    double *elem = malloc(sizeof(double) * size * (size+1)); 
-    myBandSystem->Aglob = malloc(sizeof(double*)*size);
     myBandSystem->B = malloc(sizeof(double)*size*(band+1));
     myBandSystem->A = malloc(sizeof(double*)*size);
     myBandSystem->size = size;
     myBandSystem->band = band;
     myBandSystem->A[0] = myBandSystem->B + size;    
-    myBandSystem->Aglob[0] = elem + size;
     int i;
     for (i=1 ; i < size ; i++) 
         myBandSystem->A[i] = myBandSystem->A[i-1] + band - 1;
-        myBandSystem->Aglob[i] = myBandSystem->Aglob[i-1] + size;
     femBandSystemInit(myBandSystem);
     return(myBandSystem);
 
@@ -454,7 +446,7 @@ double* femBandSystemEliminate(femBandSystem *myBand)
 {
     double  **A, *B, factor;
     int     i, j, k, jend, size, band;
-    A    = myBand->Aglob;
+    A    = myBand->A;
     B    = myBand->B;
     size = myBand->size;
     band = myBand->band;
@@ -569,6 +561,49 @@ femProblem* femElasticityRead(femGeo* theGeometry, const char *filename, femSolv
     return theProblem;
 }
 
+femSystem* femSystemCreate(int size, femSolverType iSolver, femRenumType iRenum, femGeo *theGeometry){
+    femSystem* system = malloc(sizeof(femSystem));
+    system->solverType = iSolver;
+
+    switch(iSolver) {
+        case FEM_FULL :
+            system->fullSystem = femFullSystemCreate(size); break;
+        case FEM_BAND : 
+            system->fullSystem = femFullSystemCreate(size);
+            femRenumberNodes(theGeometry, iRenum);
+            int band = femMeshComputeBand(theGeometry->theElements);
+            system->bandSystem = femBandSystemCreate(size,band);break;
+        case FEM_FRONT :
+            system->fullSystem = femFullSystemCreate(size);
+            femRenumberElem(theGeometry, iRenum);
+            int nActive = femActivity();
+            system->frontSolver = femFrontalSolverCreate(size,nActive); break;
+    }
+    return system;
+}
+
+double *femElasticitySolve(femProblem *theProblem)
+{   
+    switch(theProblem->system->solverType) {
+        femGlobalSystemAssemble(theProblem, theProblem->system->fullSystem->A, theProblem->system->fullSystem->B);
+        femBoundaryConstrain(theProblem, theProblem->system->fullSystem->A, theProblem->system->fullSystem->B);
+        case FEM_FULL : 
+            return femFullSystemEliminate(theProblem->system->fullSystem);
+            break;
+        case FEM_BAND :
+            femFulltoBand(theProblem->system->fullSystem, theProblem->system->bandSystem);
+            return femBandSystemEliminate(theProblem->system->bandSystem);
+            break;
+        case FEM_FRONT :
+            femFrontalSolve(theProblem);
+            double *soluce;
+            return soluce;
+            break;
+        default :
+            Error("Unexpected solver type");
+    };
+}
+
 void femElasticityFree(femProblem *theProblem)
 {
     femSystemFree(theProblem->system);
@@ -579,55 +614,15 @@ void femElasticityFree(femProblem *theProblem)
     free(theProblem);
 }
 
-double *femElasticitySolve(femProblem *theProblem)
-{   
-    switch(theProblem->system->solverType) {
-        
-        case FEM_FULL : 
-            femGlobalSystemAssemble(theProblem, theProblem->system->fullSolver->A, theProblem->system->fullSolver->B);
-            femBoundaryConstrain(theProblem, theProblem->system->fullSolver->A, theProblem->system->fullSolver->B);
-            return femFullSystemEliminate(theProblem->system->fullSolver);
-            break;
-        case FEM_BAND :
-            femGlobalSystemAssemble(theProblem, theProblem->system->bandSolver->Aglob, theProblem->system->bandSolver->B);
-            femBoundaryConstrain(theProblem, theProblem->system->bandSolver->Aglob, theProblem->system->bandSolver->B);
-            femFulltoBand(theProblem->system->bandSolver->Aglob, theProblem->system->bandSolver->A, theProblem->system->bandSolver->size, theProblem->system->bandSolver->band);
-            return femBandSystemEliminate(theProblem->system->bandSolver);
-            break;
-        case FEM_FRONT :
-            femGlobalSystemAssemble(theProblem, theProblem->system->frontSolver->A, theProblem->system->frontSolver->B);
-            femBoundaryConstrain(theProblem, theProblem->system->frontSolver->A, theProblem->system->frontSolver->B);
-            return femFrontalSolve(theProblem);
-            break;
-        default :
-            Error("Unexpected solver type");
-    };
-}
-
-femSystem* femSystemCreate(int size, femSolverType iSolver, femRenumType iRenum, femGeo *theGeometry){
-    femSystem* system = malloc(sizeof(femSystem));
-    system->solverType = iSolver;
-    
-    switch(iSolver) {
-        case FEM_FULL :
-            system->fullSolver = femFullSystemCreate(size); break;
-        case FEM_BAND : 
-            femRenumberNodes(theGeometry, iRenum);
-            int band = femMeshComputeBand(theGeometry->theElements);
-            system->bandSolver = femBandSystemCreate(size,band);break;
-        case FEM_FRONT :
-            femRenumberElem(theGeometry, iRenum);
-            int nLocalNode = theGeometry->theElements->nLocalNode;
-            system->frontSolver = femFrontalSolverCreate(size,nLocalNode); break;
-    }
-    return system;
-}
-
 void femSystemFree(femSystem* mySystem){
     switch(mySystem->solverType) {
-        case FEM_FULL : femFullSystemFree(mySystem->fullSolver); break;
-        case FEM_BAND : femBandSystemFree(mySystem->bandSolver); break;
-        case FEM_FRONT : femFrontalSolverFree(mySystem->frontSolver); break;
+        case FEM_FULL : femFullSystemFree(mySystem->fullSystem); break;
+        case FEM_BAND :
+            femFullSystemFree(mySystem->fullSystem); 
+            femBandSystemFree(mySystem->bandSystem); break;
+        case FEM_FRONT : 
+            femfullSystemFree(mySystem->fullSystem);
+            femFrontalSolverFree(mySystem->frontSolver); break;
     }
     free(mySystem);
 }

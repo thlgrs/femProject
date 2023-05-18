@@ -78,34 +78,36 @@ typedef struct {
 } femIntegration;
 
 typedef struct {
-    double *B;
-    double **A;
+    double *B;  // forces nodales globales
+    double **A; // matrice pleine globale
     int size;
 } femFullSystem;
 
 typedef struct {
     double *B;
-    double **A;
-    double **Aglob;        
+    double **A;        
     int size;
     int band;        
 } femBandSystem;
 
 typedef struct {
-    int size;
-    int nLoc;
-    double *B;
-    double **A;
-    double **ALoc;
-    double *BLoc;        
-    int **old;
+    double* b; // forces nodales
+    double** active; // matrice active
+    int nActive; // nombre de noeuds actifs
+    int* activeMap; // coordonnées globales des noeuds actifs
+    int* activeState; // 0: occupé, 1: libre
+    int** disparu; //disparu[iElem][iLoc] = 0 si le noeud iLoc de l'élément iElem est actif, globalCoord si à éliminer
+    int** nouveau; //nouveau[iElem][iLoc] = globalCoord si le noeud iLoc de l'élément iElem est à ajouter
+    double** stock; //stock[nElem][nElem] = stock des éléments éliminés
+    double* pivots; //pivots[nElem] = stock des pivots
+
 } femFrontalSolver;
 
 typedef struct {
     femRenumType renum;
     femSolverType solverType;
-    femFullSystem *fullSolver;
-    femBandSystem *bandSolver;
+    femFullSystem *fullSystem;
+    femBandSystem *bandSystem;
     femFrontalSolver *frontSolver;
 } femSystem;
 
