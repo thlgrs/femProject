@@ -1,22 +1,43 @@
 #include "fem.h"
 #include "myfem.h"
-#include <math.h>
 
 
 femFrontalSolver* femFrontalSolverCreate(int size, int nLoc){
     femFrontalSolver *mySolver = malloc(sizeof(femFrontalSolver));
     
     mySolver->size = size;
+    mySolver->nLoc = nLoc;
+    mySolver->old = calloc(size,sizeof(int*));
     mySolver->A = calloc(size,sizeof(double*));
     mySolver->B = calloc(size,sizeof(double));
-    mySolver->active = calloc(2*nLoc, sizeof(double*));    
-    mySolver->b = calloc(2*nLoc, sizeof(double));
+    mySolver->ALoc = calloc(2*nLoc, sizeof(double*));    
+    mySolver->BLoc = calloc(2*nLoc, sizeof(double));
+    
+    int i;
+    for(i=0; i<size; i++){
+        mySolver->old[i] = calloc(nLoc,sizeof(int));
+        mySolver->A[i] = calloc(size,sizeof(double));
+    }
+    for(i=0; i<2*nLoc; i++)
+        mySolver->ALoc[i] = calloc(2*nLoc, sizeof(double));
+        mySolver->BLoc[i] = 0;
         
     return(mySolver);
 };
 
 void femFrontalSolverFree(femFrontalSolver *mySolver){
-
+    int i;
+    for(i=0; i<2*mySolver->nLoc; i++)
+        free(mySolver->ALoc[i]);
+    for(i=0; i<mySolver->size; i++){
+        free(mySolver->A[i]);
+        free(mySolver->old[i]);
+    }
+    free(mySolver->ALoc);
+    free(mySolver->BLoc);
+    free(mySolver->A);
+    free(mySolver->B);
+    free(mySolver->old);
     free(mySolver);
     
 };

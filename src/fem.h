@@ -93,12 +93,12 @@ typedef struct {
 
 typedef struct {
     int size;
+    int nLoc;
     double *B;
     double **A;
-    int nActive;
-    double **active;
-    double *b;
-    int *activeMapping; //[elem_i[k]] liste des noeuds actifs
+    double **ALoc;
+    double *BLoc;        
+    int **old;
 } femFrontalSolver;
 
 typedef struct {
