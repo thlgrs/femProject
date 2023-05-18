@@ -79,10 +79,6 @@ double* femFrontalSolve(femProblem *theProblem){
 
 };
 
-void femFulltoBand(femFullSystem *theFull, femBandSystem *theBand){
-
-}
-
 
 
 /*--------------------------------------------OK----------------------------------------------------------*/
@@ -267,6 +263,25 @@ double* femBandSystemEliminate(femBandSystem *myBand)
     return(myBand->B);
 }
 
+void femBandSystemAssemble(femBandSystem* myBandSystem, double **Aloc, double *Bloc, int *map, int nLoc)
+{
+    int i,j;
+    for (i = 0; i < nLoc; i++) { 
+        int myRow = map[i];
+        for(j = 0; j < nLoc; j++) {
+            int myCol = map[j];
+            if (myCol >= myRow) {
+                myBandSystem->A[2*myRow][2*myCol] += Aloc[2*i][2*j];
+                myBandSystem->A[2*myRow][2*myCol+1] += Aloc[2*i][2*j+1];
+                if(2*myCol >= 2*myRow+1) 
+                    myBandSystem->A[2*myRow+1][2*myCol] += Aloc[2*i+1][2*j];
+                myBandSystem->A[2*myRow+1][2*myCol+1] += Aloc[2*i+1][2*j+1];
+            }
+        }
+        myBandSystem->B[myRow] += Bloc[i]; }
+}
+
+
 femFrontalSolver* femFrontalSolverCreate(int size, int nActive){
     femFrontalSolver *mySolver = malloc(sizeof(femFrontalSolver));
     mySolver->nActive = nActive;
@@ -406,7 +421,7 @@ femSystem* femSystemCreate(int size, femSolverType iSolver, femRenumType iRenum,
                 nouveaux[i] = calloc(nLoc,sizeof(int));
             }
             int nAct = nActive(theGeometry->theElements,disparus,nouveaux);
-            system->frontSolver = femFrontalSolverCreate(size,nActive); 
+            system->frontSolver = femFrontalSolverCreate(size,nAct); 
             system->frontSolver->disparus = disparus;
             system->frontSolver->nouveaux = nouveaux;
             break;
@@ -416,14 +431,12 @@ femSystem* femSystemCreate(int size, femSolverType iSolver, femRenumType iRenum,
 
 double *femElasticitySolve(femProblem *theProblem)
 {   
+    femGlobalSystemAssemble(theProblem, theProblem->system->fullSystem->A, theProblem->system->fullSystem->B);
     switch(theProblem->system->solverType) {
-        femGlobalSystemAssemble(theProblem, theProblem->system->fullSystem->A, theProblem->system->fullSystem->B);
-        femBoundaryConstrain(theProblem, theProblem->system->fullSystem->A, theProblem->system->fullSystem->B);
         case FEM_FULL : 
             return femFullSystemEliminate(theProblem->system->fullSystem);
             break;
         case FEM_BAND :
-            femFulltoBand(theProblem->system->fullSystem, theProblem->system->bandSystem);
             return femBandSystemEliminate(theProblem->system->bandSystem);
             break;
         case FEM_FRONT :
@@ -453,7 +466,7 @@ void femSystemFree(femSystem* mySystem){
             femFullSystemFree(mySystem->fullSystem); 
             femBandSystemFree(mySystem->bandSystem); break;
         case FEM_FRONT : 
-            femfullSystemFree(mySystem->fullSystem);
+            femFullSystemFree(mySystem->fullSystem);
             femFrontalSolverFree(mySystem->frontSolver); break;
     }
     free(mySystem);
@@ -463,26 +476,37 @@ void femGlobalSystemAssemble(femProblem *theProblem, double **A, double *B){
     femIntegration *theRule = theProblem->rule;
     femDiscrete    *theSpace = theProblem->space;
     femGeo         *theGeometry = theProblem->geometry;
-    femNodes       *theNodes = theGeometry->theNodes;
     femMesh        *theElements = theGeometry->theElements;
+    femNodes       *theNodes = theElements->nodes;
+
+    double x[4],y[4],phi[4],dphidxsi[4],dphideta[4],dphidx[4],dphidy[4],coeff[4];
+    int iElem,iInteg,iEdge,i,j,d,map[4],mapX[4],mapY[4],ctr[4];
+
+    double **Aloc = theProblem->system->Aloc;
+    double *Bloc = theProblem->system->Bloc;
     
-    double x[4],y[4],phi[4],dphidxsi[4],dphideta[4],dphidx[4],dphidy[4];
-    int iElem,iInteg,iEdge,i,j,d,map[4],mapX[4],mapY[4];
     
     double a   = theProblem->A;
     double b   = theProblem->B;
     double c   = theProblem->C;      
     double rho = theProblem->rho;
     double g   = theProblem->g;
+    coeff[0] = a; coeff[1] = b; coeff[2] = c; coeff[3] = rho*g;
 
     int nLocal = theElements->nLocalNode;
     for (iElem = 0; iElem < theElements->nElem; iElem++) {
+        for (i = 0; i < theSpace->n; i++)      
+            Bloc[i] = 0;
+            for (j = 0; j < theSpace->n; j++) 
+                Aloc[i] = 0;
         for (j=0; j < nLocal; j++) {
-            map[j]  = theElements->elem[iElem*nLocal+j];
+            map[j]  = theElements->elem[iElem*nLocal+j]; //num noeuds de l'élément iElem
             mapX[j] = 2*map[j];
             mapY[j] = 2*map[j] + 1;
             x[j]    = theNodes->X[map[j]];
-            y[j]    = theNodes->Y[map[j]];}
+            y[j]    = theNodes->Y[map[j]];
+            ctr[j]  = theProblem->constrainedNodes[map[j]];
+        }
         for (iInteg = 0; iInteg < theRule->n; iInteg++){
             double weight = theRule->weight[iInteg];     
             double xsi    = theRule->xsi[iInteg];
@@ -507,53 +531,79 @@ void femGlobalSystemAssemble(femProblem *theProblem, double **A, double *B){
 
             if(theProblem->planarStrainStress == AXISYM)
             {
-                for (i = 0; i < theSpace->n; i++) { 
-                    for(j = 0; j < theSpace->n; j++) {
-                        A[mapX[i]][mapX[j]] += (dphidx[i] * a * x[i] * dphidx[j] + 
-                                                dphidy[i] * c * x[i] * dphidy[j] +
-                                                phi[i] * (b *dphidx[j] + a * phi[j]/x[i]) +
-                                                dphidx[i] *b * phi[j]) * jac * weight;                                                                                          
-                        A[mapX[i]][mapY[j]] += (dphidx[i] * b * x[i] * dphidy[j] + 
-                                                dphidy[i] * c * x[i] * dphidx[j] +
-                                                phi[i] * b * dphidy[j]) * jac * weight;                                                                                           
-                        A[mapY[i]][mapX[j]] += (dphidy[i] * b * x[i] * dphidx[j] + 
-                                                dphidx[i] * c * x[i] * dphidy[j] +
-                                                dphidy[i] * b * phi[j]) * jac * weight;                                                                                            
-                        A[mapY[i]][mapY[j]] += (dphidy[i] * a * x[i] * dphidy[j] + 
-                                                dphidx[i] * c * x[i] * dphidx[j]) * jac * weight; }}
-                
-                for (i = 0; i < theSpace->n; i++){
-                    B[mapY[i]] -= x[i] * phi[i] * rho * g * jac * weight;
-                }
+                femLocalAxsym(theSpace, Aloc, Bloc, x, phi, dphidx, dphidy, coeff, jac, weight);
             }
             else if(theProblem->planarStrainStress == PLANAR_STRESS || theProblem->planarStrainStress == PLANAR_STRAIN)
             {
-                for (i = 0; i < theSpace->n; i++) { 
-                    for(j = 0; j < theSpace->n; j++) {
-                        A[mapX[i]][mapX[j]] += (dphidx[i] * a * dphidx[j] + 
-                                                dphidy[i] * c * dphidy[j]) * jac * weight;                                                                                          
-                        A[mapX[i]][mapY[j]] += (dphidx[i] * b * dphidy[j] + 
-                                                dphidy[i] * c * dphidx[j]) * jac * weight;                                                                                           
-                        A[mapY[i]][mapX[j]] += (dphidy[i] * b * dphidx[j] + 
-                                                dphidx[i] * c * dphidy[j]) * jac * weight;                                                                                         
-                        A[mapY[i]][mapY[j]] += (dphidy[i] * a * dphidy[j] + 
-                                                dphidx[i] * c * dphidx[j]) * jac * weight; 
-                        }
+                femLocalPlan(theSpace, Aloc, Bloc, x, phi, dphidx, dphidy, coeff, jac, weight);
+            }
+            for (i = 0; i < theSpace->n; i++)
+            {
+                if (ctr[i] == 1){
+                    femBoundaryCondition *condition = theProblem->conditions[map[i]];
+                    femBoundaryType type = condition->type;
+                    if(type == DIRICHLET_X || type == DIRICHLET_Y){
+                        constrain(type,Aloc,Bloc,i,condition->value,1,1);
                     }
+                    else if(type == NEUMANN_X || type == NEUMANN_Y){
+                        double dx, dy;
+                        if(i==0) {
+                            dx = x[i]-x[theSpace->n-1];
+                            dy = y[i]-y[theSpace->n-1];}
+                        else {
+                            dx = x[i]-x[i-1];
+                            dy = y[i]-y[i-1];}
+                        constrain(type,Aloc,Bloc,i,condition->value, dx, dy);
+                    }
+                       
                 }
-                for (i = 0; i < theSpace->n; i++){
-                    B[mapY[i]] -= phi[i] * rho * g * jac * weight; 
-                }
-        }   
-            
+            }
+        }
+        switch(theProblem->system->solverType){
+            case FEM_FULL:
+                femFullSystemAssemble(theProblem->system->fullSystem,Aloc,Bloc,map,nLocal); break;
+            case FEM_BAND:
+                femBandSystemAssemble(theProblem->system->bandSystem,Aloc,Bloc,map,nLocal); break;
+            case FEM_FRONT:
+                femFullSystemAssemble(theProblem->system->fullSystem,Aloc,Bloc,map,nLocal); break;
+        }
     }
-
 };
+
+void constrain(femBoundaryType type, double** A, double* B, int myNode, double value, double dx, double dy){
+    double length = sqrt(dx*dx+dy*dy);
+    double cos = dx/length;
+    double sin = dy/length;
+    switch (type){
+        case DIRICHLET_X:
+            femDirichlet(A,B,sizeof(A[0])/sizeof(double),2*myNode,value); break;
+        case DIRICHLET_Y:  
+            femDirichlet(A,B,sizeof(A[0])/sizeof(double),2*myNode+1,value); break;
+        case NEUMANN_X: //value = ((3-sqrt(3))/3)*value*length/2
+            value = ((3-sqrt(3))/3)*value*length/2;
+            femNeumann(B,2*myNode,value); //line integral approximation 2point gauss
+            break;                                                   // value = derivative of the flux on boundary
+        case NEUMANN_Y: //value = ((3-sqrt(3))/3)*value*length/2
+            value = ((3-sqrt(3))/3)*value*length/2;
+            femNeumann(B,2*myNode+1,value); 
+            break;
+        /*A IMPOSER AVEC TABLEAU METHODE DES DEPLACEMENTS*/
+        case NEUMANN_N:
+            value = ((3-sqrt(3))/3)*value*length/2;
+            femNeumann(B,2*myNode,value*sin); 
+            femNeumann(B,2*myNode+1,value*cos); 
+            break;
+        case NEUMANN_T:
+            value = ((3-sqrt(3))/3)*value*length/2;
+            femNeumann(B,2*myNode,value*cos); 
+            femNeumann(B,2*myNode+1,value*sin); 
+            break;
+        default: break;
+    }
+}
 
 void femBoundaryConstrain(femProblem *theProblem, double **A, double *B){
     femBoundaryCondition **conditions = theProblem->conditions;
-    femIntegration *theRule           = theProblem->rule;
-    femDiscrete    *theSpace          = theProblem->space;
     femBoundaryCondition *theBoundary;
     femBoundaryType type;
     femDomain *theDomain;
@@ -691,4 +741,54 @@ double integrate(double *x, double *y, double *dphidx, double*dphidy, femIntegra
         dphidy[i] = (dphideta[i] * dxdxsi - dphidxsi[i] * dxdeta) / jac; 
     }
     return jac; 
+}
+
+void femLocalPlan(femDiscrete* space, double **A, double* B, double* x, double* phi, double *dx, double *dy, double* coeff, double jac, double weight){
+    int n = space->n;
+    for(int i=0; i<2; i++){
+        for(int j=0; j<2; j++){
+            A[i][j] += jac * weight * (dx[i]*coeff[0]*dx[j] + dy[i]*coeff[2]*dy[j]);
+        }
+        for(int j=(n-2); j<n; j++){
+            A[i][j] += jac * weight * (dx[i]*coeff[1]*dy[j] + dy[i]*coeff[2]*dx[j]);
+        }
+        for(int j=0; j<2; j++){
+            A[i+(n-2)][j] += jac * weight * (dy[i+(n-2)]*coeff[1]*dx[j] + dx[i+(n-2)]*coeff[2]*dy[j]);
+        }
+        for(int j=(n-2); j<n; j++){
+            A[i+(n-2)][j] += jac * weight * (dy[i+(n-2)]*coeff[0]*dy[j] + dx[i+(n-2)]*coeff[2]*dx[j]);
+        }
+    }
+    for(int i = 0; i < n; i++){
+        B[i+1] -= x[i+1] * coeff[3] * jac * weight;
+    }
+}
+
+void femLocalAxsym(femDiscrete* space, double **A, double* B, double* x, double* phi, double *dx, double *dy, double* coeff, double jac, double weight){
+    int n = space->n;
+    for(int i=0; i<2; i++){
+        for(int j=0; j<2; j++){
+            A[i][j] += jac * weight * ( dx[i] * coeff[0] * x[i] * dx[j] + 
+                                        dy[i] * coeff[2] * x[i] * dy[j] +
+                                        phi[i]* (coeff[1] *dx[j] + coeff[0] * phi[j]/x[i]) +
+                                        dx[i] *coeff[1] * phi[j]);
+        }
+        for(int j=(n-2); j<n; j++){
+            A[i][j] += jac * weight * ( dx[i] * coeff[1] * x[i] * dy[j] + 
+                                        dy[i] * coeff[2] * x[i] * dx[j] +
+                                        phi[i]* coeff[1] * dy[j]);
+        }
+        for(int j=0; j<2; j++){
+            A[i+(n-2)][j] += jac * weight * (dy[i+(n-2)] * coeff[1] * x[i+(n-2)] * dx[j] + 
+                                             dx[i+(n-2)] * coeff[2] * x[i+(n-2)] * dy[j] +
+                                             dy[i+(n-2)] * coeff[1] * phi[j]);
+        }
+        for(int j=(n-2); j<n; j++){
+            A[i+(n-2)][j] += jac * weight * (dy[i+(n-2)] * coeff[0] * x[i+(n-2)] * dy[j] + 
+                                             dx[i+(n-2)] * coeff[2] * x[i+(n-2)] * dx[j]);
+        }
+    }
+    for(int i = 0; i < n; i++){
+        B[i+1] -= x[i+1] * phi[i+1] * coeff[3] * jac * weight;
+    }
 }

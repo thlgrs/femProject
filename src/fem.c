@@ -471,6 +471,21 @@ void  femFullSystemConstrain(femFullSystem *mySystem, int myNode, double myValue
     B[myNode] = myValue;
 }
 
+void femFullSystemAssemble(femFullSystem* mySystem, double **Aloc, double *Bloc, int *map, int nLoc)
+{
+    int i,j;
+    for (i = 0; i < nLoc; i++) { 
+        for(j = 0; j < nLoc; j++) {
+            mySystem->A[2*map[i]][2*map[j]]     += Aloc[2*i][2*j];
+            mySystem->A[2*map[i]][2*map[j]+1]   += Aloc[2*i][2*j+1];
+            mySystem->A[2*map[i]+1][2*map[j]]   += Aloc[2*i+1][2*j];
+            mySystem->A[2*map[i]+1][2*map[j]+1] += Aloc[2*i+1][2*j+1];
+        }
+    mySystem->B[2*map[i]]   += Bloc[2*i];
+    mySystem->B[2*map[i]+1] += Bloc[2*i+1];
+    } 
+}
+
     
 void femElasticityAddBoundaryCondition(femProblem *theProblem, char *nameDomain, femBoundaryType type, double value)
 {
