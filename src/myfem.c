@@ -510,7 +510,6 @@ void femGlobalSystemAssemble(femProblem *theProblem){
             y[j]    = theNodes->Y[map[j]];
             ctr[j]  = theProblem->constrainedNodes[map[j]]; 
             map[j] = nodeIndex(x[j],y[j],theGeometry->theNodes); //num noeuds de l'élément iElem
-            printf("map[%d] = %d\n",j,map[j]);
         }
         for (iInteg = 0; iInteg < theRule->n; iInteg++){
             double weight = theRule->weight[iInteg];     
@@ -564,7 +563,6 @@ void femGlobalSystemAssemble(femProblem *theProblem){
         }
         switch(theProblem->system->solverType){
             case FEM_FULL:
-                printf("in\n");
                 femFullSystemAssemble(theProblem->system->fullSystem,Aloc,Bloc,map,nLocal); break;
             case FEM_BAND:
                 femBandSystemAssemble(theProblem->system->bandSystem,Aloc,Bloc,map,nLocal); break;
@@ -589,8 +587,8 @@ void constrain(femBoundaryType type, femFullSystem* system, int myNode, double v
             femDirichlet(A,B,size,myNode,value); break;
         case NEUMANN_X: //value = ((3-sqrt(3))/3)*value*length/2
             value = ((3-sqrt(3))/3)*value*length/2;
-            femNeumann(B,2*myNode,value); //line integral approximation 2point gauss
-            break;                                                   // value = derivative of the flux on boundary
+            femNeumann(B,myNode,value);   //line integral approximation 2point gauss
+            break;                        // value = derivative of the flux on boundary
         case NEUMANN_Y: //value = ((3-sqrt(3))/3)*value*length/2
             value = ((3-sqrt(3))/3)*value*length/2;
             femNeumann(B,myNode,value); 
@@ -598,13 +596,13 @@ void constrain(femBoundaryType type, femFullSystem* system, int myNode, double v
         /*A IMPOSER AVEC TABLEAU METHODE DES DEPLACEMENTS*/
         case NEUMANN_N:
             value = ((3-sqrt(3))/3)*value*length/2;
-            femNeumann(B,2*myNode,value*sin); 
-            femNeumann(B,2*myNode+1,value*cos); 
+            femNeumann(B,myNode,value*sin);   //en X
+            femNeumann(B,myNode,value*cos); //en Y
             break;
         case NEUMANN_T:
             value = ((3-sqrt(3))/3)*value*length/2;
-            femNeumann(B,2*myNode,value*cos); 
-            femNeumann(B,2*myNode+1,value*sin); 
+            femNeumann(B,myNode,value*cos);   //en X
+            femNeumann(B,myNode,value*sin); //en Y
             break;
         default: break;
     }
@@ -693,10 +691,13 @@ void femDirichlet(double **A, double *B, int size, int myNode, double myValue){
     for(i=0; i < size; i++) {
         B[i] -= myValue * A[i][myNode];
         A[i][myNode] = 0.0; }
-    for(i=0; i < size; i++)
+    for(i=0; i < size; i++){
         A[myNode][i] = 0.0;
+    }
     A[myNode][myNode] = 1.0;
+    
     B[myNode] = myValue;
+    
 
 }
 
