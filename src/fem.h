@@ -96,8 +96,8 @@ typedef struct {
     int nActive; // nombre de noeuds actifs
     int* activeMap; // coordonnées globales des noeuds actifs
     int* activeState; // 0: occupé, 1: libre
-    int** disparu; //disparu[iElem][iLoc] = 0 si le noeud iLoc de l'élément iElem est actif, globalCoord si à éliminer
-    int** nouveau; //nouveau[iElem][iLoc] = globalCoord si le noeud iLoc de l'élément iElem est à ajouter
+    int** disparus; //disparu[iElem][iLoc] = 0 si le noeud iLoc de l'élément iElem est actif, globalCoord si à éliminer
+    int** nouveaux; //nouveau[iElem][iLoc] = globalCoord si le noeud iLoc de l'élément iElem est à ajouter
     double** stock; //stock[nElem][nElem] = stock des éléments éliminés
     double* pivots; //pivots[nElem] = stock des pivots
 

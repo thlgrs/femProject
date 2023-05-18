@@ -2,76 +2,83 @@
 #include "myfem.h"
 
 
-femFrontalSolver* femFrontalSolverCreate(int size, int nLoc){
-    femFullSystemCreate(size);
+femFrontalSolver* femFrontalSolverCreate(int size, int nActive){
     femFrontalSolver *mySolver = malloc(sizeof(femFrontalSolver));
-    
-    mySolver->size = size;
-    mySolver->nLoc = nLoc;
-    mySolver->old = calloc(size,sizeof(int*));
-    mySolver->A = calloc(size,sizeof(double*));
-    mySolver->B = calloc(size,sizeof(double));
-    mySolver->ALoc = calloc(2*nLoc, sizeof(double*));    
-    mySolver->BLoc = calloc(2*nLoc, sizeof(double));
-    
-    int i;
-    for(i=0; i<size; i++){
-        mySolver->old[i] = calloc(nLoc,sizeof(int));
-        mySolver->A[i] = calloc(size,sizeof(double));
+    mySolver->nActive = nActive;
+    mySolver->b = calloc(nActive, sizeof(double));
+    mySolver->active = malloc(sizeof(double*)*nActive);
+    for(int i=0; i<nActive; i++){
+        mySolver->active[i] = calloc(nActive, sizeof(double));
     }
-    for(i=0; i<2*nLoc; i++)
-        mySolver->ALoc[i] = calloc(2*nLoc, sizeof(double));
-        mySolver->BLoc[i] = 0;
-        
+    mySolver->activeMap = calloc(nActive, sizeof(int));
+    mySolver->activeState = calloc(nActive, sizeof(int));
+    mySolver->pivots = calloc(size, sizeof(int));
+    mySolver->stock = malloc(size*sizeof(double*));
+    for(int i=0; i<size; i++){
+        mySolver->stock[i] = calloc(nActive, sizeof(double));
+    }
     return(mySolver);
 };
 
 void femFrontalSolverFree(femFrontalSolver *mySolver){
-    int i;
-    for(i=0; i<2*mySolver->nLoc; i++)
-        free(mySolver->ALoc[i]);
-    for(i=0; i<mySolver->size; i++){
-        free(mySolver->A[i]);
-        free(mySolver->old[i]);
+    free(mySolver->activeMap);
+    free(mySolver->activeState);
+    free(mySolver->pivots);
+    free(mySolver->b);
+    for(int i=0; i<mySolver->nActive; i++){
+        free(mySolver->active[i]);
     }
-    free(mySolver->ALoc);
-    free(mySolver->BLoc);
-    free(mySolver->A);
-    free(mySolver->B);
-    free(mySolver->old);
+    free(mySolver->active);
+    for(int i=0; i<sizeof(mySolver->stock)/sizeof(double*); i++){
+        free(mySolver->stock[i]);
+        free(mySolver->disparus[i]);
+        free(mySolver->nouveaux[i]);
+    }
+    free(mySolver->stock);
+    free(mySolver->disparus);
+    free(mySolver->nouveaux);
     free(mySolver);
-    
 };
 
-void femFrontActivity(femGeo *theGeometry, int **old){
-    femMesh *theElements = theGeometry->theElements;
-    femNodes *theNodes = theGeometry->theElements->nodes;
+int nActive(femMesh *theElements, int **disparus, int **nouveaux){
+    femNodes *theNodes = theElements->nodes;
     int nElem = theElements->nElem;
     int *elem = theElements->elem;
     int nLocal = theElements->nLocalNode;
-    
-    int found;
-    for(int iElem=0; iElem<nElem; ++iElem){
-        int first = elem[iElem-1];
-        int second = elem[iElem];
-        for (int i=0; i<nLocal; i++){
-            found = 0;
-            double xfirst = theNodes->X[first*nLocal+i];
-            double yfirst = theNodes->Y[first*nLocal+i];
-            for(int j=0; j<nLocal; j++){
-                double xsecond = theNodes->X[second*nLocal+j];
-                double ysecond = theNodes->Y[second*nLocal+j];
-                if(xfirst == xsecond && yfirst == ysecond){
-                    found++;
-                    break;
+    int idElem1, idElem2, keep, new, nActive = nLocal;
+    for(int k = 0; k<nElem; ++k){
+        idElem1 = elem[k-1]; idElem2 = elem[k];
+        keep = 0; new = 0;
+        for(int n=0; n<nLocal; n++){
+            double x1 = theNodes->X[idElem1*nLocal+n];
+            double y1 = theNodes->Y[idElem1*nLocal+n];
+            for(int m=0; m<nLocal; m++){
+                double x2 = theNodes->X[idElem2*nLocal+m];
+                double y2 = theNodes->Y[idElem2*nLocal+m];
+
+                if(x1 != x2 && y1 != y2){
+                    disparus[idElem1][n] = idElem1*nLocal+n;}
+                else{
+                    disparus[idElem1][n] = -1;
+                    keep++;
                 }
-            }
-            old[iElem][i] = found;
+
+                for(int i=0; i<nLocal; i++){
+                    double x3 = theNodes->X[idElem1*nLocal+i];
+                    double y3 = theNodes->Y[idElem1*nLocal+i];
+                    if(x2 != x3 || y2 != y3){
+                        nouveaux[idElem1][m] = idElem2*nLocal+m;
+                        new++;
+                    }
+                    else{
+                        nouveaux[idElem1][m] = -1;
+                    }
+                }
+            }       
         }
-        for(int i=0; i<nLocal; i++)
-            printf("%d ", old[iElem][i]);
-            printf("\n");
+        nActive = nActive > keep+new ? nActive : keep+new;
     }
+    return(2*nActive);
 };
 
 void femGetMap(int* elem, int iElem, int *map, int nLocal){
@@ -87,7 +94,6 @@ void femAssembleLocal(double **ALoc, double *BLoc, double **AGlob, double *BGlob
         BLoc[i] = BGlob[2*map[i/2]];
     }
 };
-
 
 void femInjectGlobal(double **ALoc, double *BLoc, double **AGlob, double *BGlob, int *map, int nLocal){
     for(int i=0; i<2*nLocal; i++){
@@ -572,12 +578,22 @@ femSystem* femSystemCreate(int size, femSolverType iSolver, femRenumType iRenum,
             system->fullSystem = femFullSystemCreate(size);
             femRenumberNodes(theGeometry, iRenum);
             int band = femMeshComputeBand(theGeometry->theElements);
-            system->bandSystem = femBandSystemCreate(size,band);break;
+            system->bandSystem = femBandSystemCreate(size,band); break;
         case FEM_FRONT :
             system->fullSystem = femFullSystemCreate(size);
             femRenumberElem(theGeometry, iRenum);
-            int nActive = femActivity();
-            system->frontSolver = femFrontalSolverCreate(size,nActive); break;
+            int nLoc = theGeometry->theElements->nLocalNode;
+            int** disparus = malloc(theGeometry->theElements->nElem*sizeof(int*));
+            int** nouveaux = malloc(theGeometry->theElements->nElem*sizeof(int*));
+            for (int i=0; i < theGeometry->theElements->nElem; i++) {
+                disparus[i] = calloc(nLoc,sizeof(int));
+                nouveaux[i] = calloc(nLoc,sizeof(int));
+            }
+            int nAct = nActive(theGeometry->theElements,disparus,nouveaux);
+            system->frontSolver = femFrontalSolverCreate(size,nActive); 
+            system->frontSolver->disparus = disparus;
+            system->frontSolver->nouveaux = nouveaux;
+            break;
     }
     return system;
 }
