@@ -79,8 +79,6 @@ double* femFrontalSolve(femProblem *theProblem){
 };
 
 
-
-/*--------------------------------------------OK----------------------------------------------------------*/
 double *theGlobalCoord;
 
 int femCompare(const void *i1, const void *i2){
@@ -93,41 +91,63 @@ int femCompare(const void *i1, const void *i2){
 
 void femRenumberNodes(femGeo *theGeometry, femRenumType renumType){
     int i;
-    femNodes *oldNodes = theGeometry->theNodes;
-    double *newX = malloc(sizeof(double)*oldNodes->nNodes);
-    double *newY = malloc(sizeof(double)*oldNodes->nNodes);
+
+    femNodes *theNodes = theGeometry->theNodes;
+    double *newX = malloc(sizeof(double)*theNodes->nNodes);
+    double *newY = malloc(sizeof(double)*theNodes->nNodes);
+    femMesh *theElements = theGeometry->theElements;
+    int *newElem = malloc(sizeof(int)*theElements->nElem);
+    femMesh *theEdges = theGeometry->theEdges;
+    int *newEdges = malloc(sizeof(int)*theEdges->nElem);
     
     switch (renumType) {
         case FEM_NO :
             break;
         case FEM_XNUM :
-            theGlobalCoord = oldNodes->X; 
+            theGlobalCoord = theNodes->X; 
             break;
         case FEM_YNUM : 
-            theGlobalCoord = oldNodes->Y; 
+            theGlobalCoord = theNodes->Y; 
             break;
         default : Error("Unexpected renumbering option"); 
     }
     
-    int *inverse = malloc(sizeof(int)*oldNodes->nNodes);
-    for (i = 0; i < oldNodes->nNodes; i++){
-        inverse[oldNodes->nNodes-i-1] = i;
-    }
-    
-    qsort(inverse, oldNodes->nNodes, sizeof(int), femCompare);
-    
-    for (i=0; i<oldNodes->nNodes; i++){
-        newX[i] = oldNodes->X[inverse[i]];
-        newY[i] = oldNodes->Y[inverse[i]];
-    }
-    for(i=0; i<oldNodes->nNodes; i++){
-        oldNodes->X[i] = newX[i];
-        oldNodes->Y[i] = newY[i];
+    int *map = malloc(sizeof(int)*theNodes->nNodes);
+    int *inverse = malloc(sizeof(int)*theNodes->nNodes);
+    for (i = 0; i < theNodes->nNodes; i++){
+        map[i] = i;
     }
 
-    free(inverse);
+    qsort(map, theNodes->nNodes, sizeof(int), femCompare);
+    
+    for (i=0; i<theNodes->nNodes; i++){
+        inverse[map[i]] = i;
+        newX[i] = theNodes->X[map[i]];
+        newY[i] = theNodes->Y[map[i]];
+    }
+    for(i=0; i<theElements->nElem; i++){
+        newElem[i] = inverse[theElements->elem[i]];
+    }
+    for(i=0; i<theEdges->nElem; i++){
+        newEdges[i] = inverse[theEdges->elem[i]];
+    }
+
+    for(i=0; i<theNodes->nNodes; i++){
+        theNodes->X[i] = newX[i];
+        theNodes->Y[i] = newY[i];
+    }
+    for(i=0; i<theElements->nElem; i++){
+        theElements->elem[i] = newElem[i];
+    }
+    for(i=0; i<theEdges->nElem; i++){
+        theEdges->elem[i] = newEdges[i];
+    }
+    free(map);
     free(newX);
     free(newY);
+    free(newElem);
+    free(newEdges);
+    free(inverse);
 };
 
 void femRenumberElem(femGeo *theGeometry, femRenumType renumType){
@@ -172,14 +192,14 @@ void femRenumberElem(femGeo *theGeometry, femRenumType renumType){
 
 };
 
-int femMeshComputeBand(femMesh *theMesh)
+int femComputeBand(femMesh *theElements)
 {
     int iElem,j,myMax,myMin,myBand,map[4];
-    int nLocal = theMesh->nLocalNode;
+    int nLocal = theElements->nLocalNode;
     myBand = 0;
-    for(iElem = 0; iElem < theMesh->nElem; iElem++) {
+    for(iElem = 0; iElem < theElements->nElem; iElem++) {
         for (j=0; j < nLocal; ++j) 
-            map[j] = theMesh->elem[theMesh->elem[iElem*nLocal+j]];
+            map[j] = theElements->elem[iElem*nLocal+j];
         myMin = map[0];
         myMax = map[0];
         for (j=1; j < nLocal; j++) {
@@ -490,6 +510,8 @@ void femGlobalSystemAssemble(femProblem *theProblem){
     femGeo         *theGeometry = theProblem->geometry;
     femMesh        *theElements = theGeometry->theElements;
     femNodes       *theNodes = theElements->nodes;
+    femBoundaryCondition *condition;
+    femBoundaryType type;
 
     double x[4],y[4],phi[4],dphidxsi[4],dphideta[4],dphidx[4],dphidy[4],coeff[4];
     int iElem,iInteg,iEdge,i,j,d,map[4],mapX[4],mapY[4],ctr[4],globMap[4];
@@ -547,14 +569,15 @@ void femGlobalSystemAssemble(femProblem *theProblem){
                 femLocalPlan(theSpace, A, Bloc, x, phi, dphidx, dphidy, coeff, jac, weight);
             }
             for (i = 0; i < theSpace->n; i++)
-            {
+            { 
                 if (ctr[i] == 1){
-                    femBoundaryCondition *condition = theProblem->conditions[map[i]];
-                    femBoundaryType type = condition->type;
+                    condition = theProblem->conditions[map[i]]; 
+                    type = condition->type;
                     if(type == DIRICHLET_X || type == DIRICHLET_Y){
                         constrain(type,theProblem->system->local,i,condition->value,1,1);
                     }
                     else if(type == NEUMANN_X || type == NEUMANN_Y){
+                        
                         double dx, dy;
                         if(i==0) {
                             dx = x[i]-x[theSpace->n-1];
@@ -567,6 +590,7 @@ void femGlobalSystemAssemble(femProblem *theProblem){
                        
                 }
             }
+            
         }
         switch(theProblem->system->solverType){
             case FEM_FULL:
