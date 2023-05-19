@@ -9,6 +9,7 @@ myfem.c
 femProblem* femElasticityRead(femGeo* theGeometry, const char *filename, femSolverType iSolver, femRenumType iRenum);
 void        femSystemCreate(int size, femSolverType iSolver, femRenumType iRenum, femProblem *theProblem);
 void        femElasticitySet(femProblem *theProblem);
+void        femBoundaryConstrain(femProblem *theProblem, double **A, double *B);
 double*     femElasticitySolve(femProblem *theProblem);
 void        femElasticityFree(femProblem *theProblem);
 void        femSystemFree(femSystem* theSystem);
@@ -25,6 +26,7 @@ void    constrain(femBoundaryType type, femFullSystem* system, int myNode, doubl
 void    constrainb(femBoundaryType type, femBandSystem* system, int myNode, double value, double dx, double dy);
 void    dirichlet(double **A, double *B, int size, int myNode, double myValue);
 void    neumann(double *B, int myNode, double myValue);
+double  longueur(double* x, double* y, int size);
 
 /*BAND SYSTEM*/
 femBandSystem* femBandSystemCreate(int size, int band);
