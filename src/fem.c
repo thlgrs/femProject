@@ -541,7 +541,6 @@ void femElasticityPrint(femProblem *theProblem)
     printf(" ======================================================================================= \n\n");
 }
 
-
 void femElasticityWrite(femProblem *theProblem, const char *filename) 
 {
    FILE* file = fopen(filename,"w");
