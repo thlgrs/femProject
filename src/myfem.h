@@ -1,3 +1,8 @@
+/*
+myfem.c
+
+*/
+
 #include "fem.h"
 
 /*MAIN FUNCTIONS*/
@@ -34,11 +39,10 @@ void           femPostBandSet(femProblem* theProblem);
 void           setBand(femBandSystem* myBandSystem);
 
 
-/*FRONTAL SOLVER*/
+/*FRONTAL SOLVER not-implemented*/
 femFrontalSolver* femFrontalSolverCreate(int size, int nLoc);
 void              femFrontalSolverFree(femFrontalSolver* mySolver);
 double*           femFrontalSolve(femProblem *thePorblem);
 int               nActive(femMesh *theElements, int **disparus, int **nouveaux);
 void              femAssembleLocal(double **ALoc, double *BLoc, double **AGlob, double *BGlob, int *map, int nLocal);
 void              femInjectGlobal (double **ALoc, double *BLoc, double **AGlob, double *BGlob, int *map, int nLocal);
-
