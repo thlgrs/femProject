@@ -260,20 +260,21 @@ void femSystemFree(femSystem* mySystem){
 }
 
 
-
 /*SECONDARY FUNCTIONS*/
 
 int computeBand(femMesh *theElements)
 {
-    int iElem,j,myMax,myMin,myBand,map[4];
+    int iElem,j,myMax,myMin,myBand,map[4],x[4],y[4];
     int nLocal = theElements->nLocalNode;
+    femNodes *theNodes = theElements->nodes;
     myBand = 0;
     for(iElem = 0; iElem < theElements->nElem; iElem++) {
         for (j=0; j < nLocal; ++j){
-            int elemNumber = theElements->elem[iElem*nLocal+j];
-            map[j] = 2*elemNumber;
+            map[j]  = theElements->elem[iElem*nLocal+j];
+            x[j]    = theNodes->X[map[j]];
+            y[j]    = theNodes->Y[map[j]]; 
+            map[j] = nodeIndex(x[j],y[j],theNodes);
         } 
-            map[j] = theElements->elem[iElem*nLocal+j];
         myMin = map[0];
         myMax = map[0];
         for (j=1; j < nLocal; j++) {
