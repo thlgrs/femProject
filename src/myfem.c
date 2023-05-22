@@ -24,6 +24,7 @@ femProblem* femElasticityRead(femGeo* theGeometry, const char *filename, femSolv
         theProblem->space    = femDiscreteCreate(4,FEM_QUAD);
         theProblem->rule     = femIntegrationCreate(4,FEM_QUAD); }
 
+    theProblem->system = femSystemCreate(size, iSolver, iRenum, theProblem);
 
     char theLine[MAXNAME];
     char theDomain[MAXNAME];
@@ -76,29 +77,29 @@ femProblem* femElasticityRead(femGeo* theGeometry, const char *filename, femSolv
         theProblem->B = E*nu/((1+nu)*(1-2*nu));
         theProblem->C = E/(2*(1+nu)); }
 
-    femSystemCreate(size, iSolver, iRenum, theProblem);
 
     fclose(file);
     return theProblem;
 }
 
-void femSystemCreate(int size, femSolverType iSolver, femRenumType iRenum, femProblem *theProblem){
+femSystem* femSystemCreate(int size, femSolverType iSolver, femRenumType iRenum, femProblem *theProblem){
     femGeo *theGeometry = theProblem->geometry;
     femSystem* system = malloc(sizeof(femSystem));
+    system->size = size;
     system->solverType = iSolver;
     int nLocal = theGeometry->theElements->nLocalNode;
     system->local = femFullSystemCreate(nLocal);
     
     switch(iSolver) {
         case FEM_FULL :
-            system->fullSystem = femFullSystemCreate(size); break;
+            system->fullSystem = femFullSystemCreate(size);
         case FEM_BPOST :
             renumberNodes(theProblem, iRenum);
-            system->bandSystem = femPostBandSystemCreate(size); break;
+            system->bandSystem = femPostBandSystemCreate(size);
         case FEM_BAND : 
             renumberNodes(theProblem, iRenum);
             int band = computeBand(theGeometry->theElements);
-            system->bandSystem = femBandSystemCreate(size,band); break;
+            system->bandSystem = femBandSystemCreate(size,band);
         case FEM_FRONT :
             system->fullSystem = femFullSystemCreate(size);
             renumberElem(theGeometry, iRenum);
@@ -113,9 +114,8 @@ void femSystemCreate(int size, femSolverType iSolver, femRenumType iRenum, femPr
             system->frontSolver = femFrontalSolverCreate(size,nAct); 
             system->frontSolver->disparus = disparus;
             system->frontSolver->nouveaux = nouveaux;
-            break;
     }
-    theProblem->system = system;
+    return system;
 }
 
 void femElasticitySet(femProblem *theProblem){
@@ -143,7 +143,7 @@ void femElasticitySet(femProblem *theProblem){
 
     int nLocal = theElements->nLocalNode;
     for (iElem = 0; iElem < theElements->nElem; iElem++) {
-        for (i = 0; i < theSpace->n; i++)      Bloc[i] = 0;
+        for (i = 0; i < theSpace->n; i++) Bloc[i] = 0;
         for (i = 0; i < (theSpace->n)*(theSpace->n); i++) Aloc[i] = 0;
         for (j=0; j < nLocal; j++) {
             map[j]  = theElements->elem[iElem*nLocal+j]; 
@@ -151,8 +151,9 @@ void femElasticitySet(femProblem *theProblem){
             mapY[j] = 2*map[j] + 1;
             x[j]    = theNodes->X[map[j]];
             y[j]    = theNodes->Y[map[j]];
-            constrained[j]  = theProblem->constrainedNodes[map[j]]; 
             map[j] = nodeIndex(x[j],y[j],theGeometry->theNodes); //num noeuds de l'élément iElem
+            constrained[j]  = theProblem->constrainedNodes[map[j]]; 
+            
         }
         for (iInteg = 0; iInteg < theRule->n; iInteg++){
             double weight = theRule->weight[iInteg];     
@@ -176,22 +177,22 @@ void femElasticitySet(femProblem *theProblem){
                       
             switch(theProblem->planarStrainStress){
                 case PLANAR_STRESS:
-                    localPlannar(theSpace, A, Bloc, x, phi, dphidx, dphidy, coeff, jac, weight); break;
+                    localPlannar(theSpace, A, Bloc, x, phi, dphidx, dphidy, coeff, jac, weight);
                 case PLANAR_STRAIN:
-                    localPlannar(theSpace, A, Bloc, x, phi, dphidx, dphidy, coeff, jac, weight); break;
+                    localPlannar(theSpace, A, Bloc, x, phi, dphidx, dphidy, coeff, jac, weight);
                 case AXISYM:
-                    localAxisym(theSpace, A, Bloc, x, phi, dphidx, dphidy, coeff, jac, weight); break;
+                    localAxisym(theSpace, A, Bloc, x, phi, dphidx, dphidy, coeff, jac, weight);
             }
-            
-        }
-        switch(theProblem->system->solverType){
+            switch(theProblem->system->solverType){
             case FEM_FULL:
-                femFullSystemAssemble(theProblem->system->fullSystem,Aloc,Bloc,map,nLocal); break;
+                femFullSystemAssemble(theProblem->system->fullSystem,Aloc,Bloc,map,nLocal);
             case FEM_BAND:
-                femBandSystemAssemble(theProblem->system->bandSystem,Aloc,Bloc,map,nLocal); break;
+                femBandSystemAssemble(theProblem->system->bandSystem,Aloc,Bloc,map,nLocal);
             case FEM_FRONT:
-                femFullSystemAssemble(theProblem->system->fullSystem,Aloc,Bloc,map,nLocal); break;
+                femFullSystemAssemble(theProblem->system->fullSystem,Aloc,Bloc,map,nLocal);
+            }
         }
+        
     }
 };
 
@@ -238,25 +239,25 @@ void femBoundaryConstrain(femProblem *theProblem, double **A, double *B){
         for(iEdge=0; iEdge<nEdge; ++iEdge){
             switch (type){
                 case DIRICHLET_X:
-                    dirichlet(A,B,size,2*map[iEdge],value); break;
+                    dirichlet(A,B,size,2*map[iEdge],value); 
                 case DIRICHLET_Y:  
-                    dirichlet(A,B,size,2*map[iEdge]+1,value); break;
+                    dirichlet(A,B,size,2*map[iEdge]+1,value); 
                 case NEUMANN_X:
                     neumann(B,2*map[iEdge],((3-sqrt(3))/3)*value*length/2); //line integral approximation 2point gauss
-                    break;                                                   // value = derivative of the flux on boundary
+                                                                       // value = derivative of the flux on boundary
                 case NEUMANN_Y:
                     neumann(B,2*map[iEdge]+1,((3-sqrt(3))/3)*value*length/2); 
-                    break;
+                    
                 /*A IMPOSER AVEC TABLEAU METHODE DES DEPLACEMENTS*/
                 case NEUMANN_N:
                     neumann(B,2*map[iEdge],((3-sqrt(3))/3)*value*length/2); 
                     neumann(B,2*map[iEdge]+1,((3-sqrt(3))/3)*value*length/2); 
-                    break;
+                    
                 case NEUMANN_T:
                     neumann(B,2*map[iEdge],((3-sqrt(3))/3)*value*length/2); 
                     neumann(B,2*map[iEdge]+1,((3-sqrt(3))/3)*value*length/2); 
-                    break;
-                default: break;
+                    
+                 
             }  
         }     
 
@@ -276,18 +277,18 @@ double *femElasticitySolve(femProblem *theProblem)
             femBoundaryConstrain(theProblem, theProblem->system->fullSystem->A, 
                                     theProblem->system->fullSystem->B);
             return femFullSystemEliminate(theProblem->system->fullSystem);
-            break;
+            
         case FEM_BAND :
             femElasticitySet(theProblem);
             femBoundaryConstrain(theProblem, theProblem->system->bandSystem->A, 
                                     theProblem->system->bandSystem->B);
             return femBandSystemEliminate(theProblem->system->bandSystem);
-            break;
+            
         case FEM_BPOST:
             femPostBandSet(theProblem);
             setBand(theProblem->system->bandSystem);
             return femBandSystemEliminate(theProblem->system->bandSystem);
-            break;
+            
         case FEM_FRONT :
             femElasticitySet(theProblem);  
             femBoundaryConstrain(theProblem, theProblem->system->fullSystem->A, 
@@ -295,7 +296,7 @@ double *femElasticitySolve(femProblem *theProblem)
             femFrontalSolve(theProblem);
             double *soluce;
             return soluce;
-            break;
+            
         default :
             Error("Unexpected solver type");
     };
@@ -313,13 +314,13 @@ void femElasticityFree(femProblem *theProblem)
 
 void femSystemFree(femSystem* mySystem){
     switch(mySystem->solverType) {
-        case FEM_FULL : femFullSystemFree(mySystem->fullSystem); break;
+        case FEM_FULL : femFullSystemFree(mySystem->fullSystem); 
         case FEM_BAND :
             femFullSystemFree(mySystem->local); 
-            femBandSystemFree(mySystem->bandSystem); break;
+            femBandSystemFree(mySystem->bandSystem); 
         case FEM_FRONT : 
             femFullSystemFree(mySystem->fullSystem);
-            femFrontalSolverFree(mySystem->frontSolver); break;
+            femFrontalSolverFree(mySystem->frontSolver); 
     }
     free(mySystem);
 }
@@ -347,6 +348,7 @@ int computeBand(femMesh *theElements)
             myMin = fmin(map[j],myMin); }
         if (myBand < (myMax - myMin)) myBand = myMax - myMin; }         
     return(++myBand);
+    printf("myBand = %d\n",myBand);
 }
 
 int compare(const void *i1, const void *i2){
@@ -372,14 +374,13 @@ void renumberNodes(femProblem *theProblem, femRenumType renumType){
     
     switch (renumType) {
         case FEM_NO :
-            break;
+            
         case FEM_XNUM :
             GLOBAL_COORD = theNodes->X; 
-            break;
+            
         case FEM_YNUM : 
             GLOBAL_COORD = theNodes->Y; 
-            break;
-        default : Error("Unexpected renumbering option"); 
+
     }
     
     int *map = malloc(sizeof(int)*theNodes->nNodes);
@@ -433,7 +434,7 @@ void renumberElem(femGeo *theGeometry, femRenumType renumType){
     }
     switch (renumType) {
         case FEM_NO :
-            break;
+            
         case FEM_XNUM :
             GLOBAL_COORD = realloc(GLOBAL_COORD, sizeof(double)*theElements->nElem);
             for(i = 0; i < theElements->nElem; i++){
@@ -441,7 +442,7 @@ void renumberElem(femGeo *theGeometry, femRenumType renumType){
                     slice[j] = theElements->nodes->X[i*nLocalNode+j];
                 GLOBAL_COORD[i] = femMin(slice, nLocalNode);
             }             
-            break;
+            
         case FEM_YNUM :
             GLOBAL_COORD = realloc(GLOBAL_COORD, sizeof(double)*theElements->nElem);
             for(i = 0; i < theElements->nElem; i++){
@@ -449,8 +450,7 @@ void renumberElem(femGeo *theGeometry, femRenumType renumType){
                     slice[j] = theElements->nodes->Y[i*nLocalNode+j];
                 GLOBAL_COORD[i] = femMin(slice, nLocalNode);
             }
-            break;
-        default : Error("Unexpected renumbering option"); 
+
     }
     qsort(newElements, theElements->nElem, sizeof(int), compare);
     for(i = 0; i < theElements->nElem; i++){
@@ -531,29 +531,28 @@ void constrain(femBoundaryType type, femFullSystem* system, int myNode, double v
     double sin = dy/length;
     switch (type){
         case DIRICHLET_X:
-            dirichlet(A,B,size,myNode,value); break;
+            dirichlet(A,B,size,myNode,value); 
         case DIRICHLET_Y:  
-            dirichlet(A,B,size,myNode,value); break;
+            dirichlet(A,B,size,myNode,value); 
         case NEUMANN_X: //value = ((3-sqrt(3))/3)*value*length/2
             value = ((3-sqrt(3))/3)*value*length/2;
             neumann(B,myNode,value);   //line integral approximation 2point gauss
-            break;                        // value = derivative of the flux on boundary
+                                    // value = derivative of the flux on boundary
         case NEUMANN_Y: //value = ((3-sqrt(3))/3)*value*length/2
             value = ((3-sqrt(3))/3)*value*length/2;
             neumann(B,myNode,value); 
-            break;
+            
         /*A IMPOSER AVEC TABLEAU METHODE DES DEPLACEMENTS*/
         case NEUMANN_N:
             value = ((3-sqrt(3))/3)*value*length/2;
             neumann(B,myNode,value*sin);   //en X
             neumann(B,myNode,value*cos); //en Y
-            break;
+            
         case NEUMANN_T:
             value = ((3-sqrt(3))/3)*value*length/2;
             neumann(B,myNode,value*cos);   //en X
             neumann(B,myNode,value*sin); //en Y
-            break;
-        default: break;
+
     }
 }
 
@@ -567,29 +566,27 @@ void constrainb(femBoundaryType type, femBandSystem* system, int myNode, double 
     double sin = dy/length;
     switch (type){
         case DIRICHLET_X:
-            dirichlet(A,B,size,myNode,value); break;
+            dirichlet(A,B,size,myNode,value); 
         case DIRICHLET_Y:  
-            dirichlet(A,B,size,myNode,value); break;
+            dirichlet(A,B,size,myNode,value); 
         case NEUMANN_X: //value = ((3-sqrt(3))/3)*value*length/2
             value = ((3-sqrt(3))/3)*value*length/2;
             neumann(B,myNode,value);   //line integral approximation 2point gauss
-            break;                        // value = derivative of the flux on boundary
+                                    // value = derivative of the flux on boundary
         case NEUMANN_Y: //value = ((3-sqrt(3))/3)*value*length/2
             value = ((3-sqrt(3))/3)*value*length/2;
             neumann(B,myNode,value); 
-            break;
+            
         /*A IMPOSER AVEC TABLEAU METHODE DES DEPLACEMENTS*/
         case NEUMANN_N:
             value = ((3-sqrt(3))/3)*value*length/2;
             neumann(B,myNode,value*sin);   //en X
             neumann(B,myNode,value*cos); //en Y
-            break;
+            
         case NEUMANN_T:
             value = ((3-sqrt(3))/3)*value*length/2;
             neumann(B,myNode,value*cos);   //en X
             neumann(B,myNode,value*sin); //en Y
-            break;
-        default: break;
     }
 }
 
@@ -604,8 +601,6 @@ void dirichlet(double **A, double *B, int size, int myNode, double myValue){
     A[myNode][myNode] = 1.0;
     
     B[myNode] = myValue;
-    
-
 }
 
 void neumann(double *B, int myNode, double myValue){
@@ -617,6 +612,20 @@ double longueur(double* x, double* y, int size){
     for(int i=0; i<size; ++i){
         length += sqrt((x[i-1]-x[i])*(x[i-1]-x[i])+(y[i-1]-y[i])*(y[i-1]-y[i]));
     }
+    return length;
+}
+
+double domainLength(femDomain* domain){
+    femNodes* theNodes = domain->mesh->nodes;
+    double* x = malloc(domain->nElem*sizeof(double));
+    double* y = malloc(domain->nElem*sizeof(double));
+    for(int i=0; i<domain->nElem; i++){
+        x[i] = theNodes->X[domain->elem[i]];
+        y[i] = theNodes->Y[domain->elem[i]];
+    }
+    double length = longueur(x, y, domain->nElem);
+    free(x);
+    free(y);
     return length;
 }
 
@@ -734,8 +743,8 @@ double* femBandSystemEliminate(femBandSystem *myBand)
     /* Incomplete Cholesky factorization */ 
 
     for (k=0; k < size; k++) {
-        if ( fabs(A[k][k]) <= 1e-4 ) {
-            Error("Cannot eleminate with such a pivot"); }
+        /*if ( fabs(A[k][k]) <= 1e-4 ) {
+            Error("Cannot eleminate with such a pivot"); }*/
         jend = fmin(k + band,size);
         for (i = k+1 ; i <  jend; i++) {
             factor = A[k][i] / A[k][k];

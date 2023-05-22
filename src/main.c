@@ -12,14 +12,16 @@
  
 #include "fem.c"
 #include "myfem.c"
+#include "newProject.c"
 
 int main(void)
 {   
-    femSolverType solverType = FEM_FULL;
+    femSolverType solverType = FEM_BAND;
     femRenumType renumType = FEM_XNUM;
 
     femGeo* theGeometry = geoGetGeometry();  
     geoMeshRead("../data/mesh.txt");
+    
     
     femProblem* theProblem = femElasticityRead(theGeometry,"../data/problem.txt", solverType, renumType);
     femElasticityPrint(theProblem);
@@ -27,8 +29,7 @@ int main(void)
     femNodes *theNodes = theGeometry->theNodes;
     femFieldWrite(theNodes->nNodes,2,&theSoluce[0],"../data/U.txt");
     femFieldWrite(theNodes->nNodes,2,&theSoluce[1],"../data/V.txt");
-    femElasticityFree(theProblem); 
-    geoFree();
+    femElasticityFree(theProblem);// geoFree();
     return 0;  
 }
 
