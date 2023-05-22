@@ -1,8 +1,4 @@
 Size 327 
-           inf          -nan-0.0000000e+00
-          -nan 0.0000000e+00          -nan
-          -nan          -nan           inf
- 0.0000000e+00 0.0000000e+00          -nan
           -nan          -nan          -nan
           -nan          -nan          -nan
           -nan          -nan          -nan
@@ -20,7 +16,6 @@ Size 327
           -nan          -nan          -nan
           -nan          -nan          -nan
           -nan          -nan          -nan
-          -nan           inf          -nan
           -nan          -nan          -nan
           -nan          -nan          -nan
           -nan          -nan          -nan
@@ -33,7 +28,6 @@ Size 327
           -nan          -nan          -nan
           -nan          -nan          -nan
           -nan          -nan          -nan
-          -nan-0.0000000e+00          -nan
           -nan          -nan          -nan
           -nan          -nan          -nan
           -nan          -nan          -nan
@@ -43,14 +37,10 @@ Size 327
           -nan          -nan          -nan
           -nan          -nan          -nan
           -nan          -nan          -nan
-          -nan          -nan 0.0000000e+00
           -nan          -nan          -nan
           -nan          -nan          -nan
-          -nan-0.0000000e+00          -nan
-          -nan           inf          -nan
           -nan          -nan          -nan
           -nan          -nan          -nan
--0.0000000e+00          -nan          -nan
           -nan          -nan          -nan
           -nan          -nan          -nan
           -nan          -nan          -nan
@@ -63,7 +53,6 @@ Size 327
           -nan          -nan          -nan
           -nan          -nan          -nan
           -nan          -nan          -nan
-          -nan 0.0000000e+00          -nan
           -nan          -nan          -nan
           -nan          -nan          -nan
           -nan          -nan          -nan
@@ -74,37 +63,48 @@ Size 327
           -nan          -nan          -nan
           -nan          -nan          -nan
           -nan          -nan          -nan
-          -nan          -nan 0.0000000e+00
           -nan          -nan          -nan
- 0.0000000e+00          -nan          -nan
           -nan          -nan          -nan
           -nan          -nan          -nan
           -nan          -nan          -nan
- 0.0000000e+00          -nan          -nan
           -nan          -nan          -nan
- 0.0000000e+00-0.0000000e+00          -nan
           -nan          -nan          -nan
           -nan          -nan          -nan
           -nan          -nan          -nan
           -nan          -nan          -nan
           -nan          -nan          -nan
           -nan          -nan          -nan
-          -nan-1.3273371e-02          -nan
-          -nan 4.4521889e+00          -inf
-          -inf 1.4390491e+00-5.6177994e-02
- 1.2028421e+01 1.5257575e+00-8.8028324e-02
- 1.4429426e-02-2.6177296e+08 1.9572349e-01
--4.3943366e-01-4.3110478e-03 1.8936660e+02
- 1.5453143e+00 0.0000000e+00-1.3257596e-09
- 5.6725654e-01 9.1784382e-08           inf
- 1.2663001e-01 1.8565206e-08 1.2678492e-09
- 7.3977006e-02 2.0197257e-02-1.0028897e-01
-          -inf-9.4814304e-10 4.7486541e-01
- 1.8649418e+00-7.4200302e-02 1.4556147e+02
- 0.0000000e+00           inf 0.0000000e+00
- 0.0000000e+00 0.0000000e+00 0.0000000e+00
- 0.0000000e+00 0.0000000e+00 0.0000000e+00
- 0.0000000e+00 0.0000000e+00 0.0000000e+00
-           inf          -nan 9.5396045e+00
- 3.5366190e-01          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
+          -nan          -nan          -nan
           -nan          -nan          -nan

@@ -134,7 +134,7 @@ femSystem* systemConstrain(femSystem *theSystem, femProblem *theProblem)
 
 double *systemSolve(femProblem *theProblem)
 {
-    systemAssemble(theProblem);
+    femElasticitySet(theProblem);
     theProblem->system = systemConstrain(theProblem->system, theProblem);
     return femBandSystemEliminate(theProblem->system->bandSystem);
 }
